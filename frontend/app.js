@@ -16,18 +16,17 @@ function showToast(msg) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'toast';
-    el.style.cssText =
-      'position:fixed;bottom:20px;right:20px;background:#111827;color:#fff;padding:10px 16px;border-radius:10px;z-index:9999;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.22);';
     document.body.appendChild(el);
   }
   el.textContent = msg;
   el.classList.remove('hidden');
-  el.style.display = 'block';
+  el.style.cssText =
+    'position:fixed;bottom:20px;right:20px;background:#111827;color:#ffffff;padding:11px 16px;border-radius:10px;z-index:99999;font-size:14px;font-weight:500;box-shadow:0 10px 25px rgba(0,0,0,0.25);display:block;';
   clearTimeout(window._toastTimer);
   window._toastTimer = setTimeout(() => {
     el.classList.add('hidden');
     el.style.display = 'none';
-  }, 2600);
+  }, 2800);
 }
 
 function escapeHtml(str = '') {
@@ -36,6 +35,17 @@ function escapeHtml(str = '') {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function setVisible(el, visible, displayType = 'block') {
+  if (!el) return;
+  if (visible) {
+    el.classList.remove('hidden', 'hide', 'd-none');
+    el.style.setProperty('display', displayType, 'important');
+  } else {
+    el.classList.add('hidden');
+    el.style.setProperty('display', 'none', 'important');
+  }
 }
 
 function saveCart() {
@@ -63,7 +73,7 @@ function updateCartUI() {
   if (!listEl) return;
 
   if (!cart.length) {
-    listEl.innerHTML = '<p class="empty-state">Your bag is empty. Add a youth drop to get started.</p>';
+    listEl.innerHTML = '<p class="empty-state">Your bag is empty. Add an item to get started.</p>';
     if (subtotalEl) subtotalEl.textContent = '৳0';
     return;
   }
@@ -80,10 +90,10 @@ function updateCartUI() {
             <strong>${escapeHtml(item.title)}</strong>
             <div style="font-size:13px;opacity:0.75;">৳${price.toLocaleString()} × ${qty}</div>
           </div>
-          <div class="cart-actions" style="display:flex;gap:6px;">
-            <button type="button" onclick="changeQty(${item.id}, -1)">-</button>
-            <button type="button" onclick="changeQty(${item.id}, 1)">+</button>
-            <button type="button" onclick="removeFromCart(${item.id})">✕</button>
+          <div class="cart-actions" style="display:flex;gap:6px;align-items:center;">
+            <button type="button" data-cart-dec="${item.id}" style="padding:4px 9px;cursor:pointer;">-</button>
+            <button type="button" data-cart-inc="${item.id}" style="padding:4px 9px;cursor:pointer;">+</button>
+            <button type="button" data-cart-rem="${item.id}" style="padding:4px 9px;cursor:pointer;">✕</button>
           </div>
         </div>
       `;
@@ -94,13 +104,17 @@ function updateCartUI() {
 }
 
 function addToCart(productId) {
-  const prod = allProducts.find((p) => Number(p.id) === Number(productId));
+  const pid = Number(productId);
+  let prod = allProducts.find((p) => Number(p.id) === pid);
+  if (!prod && Array.isArray(window.products)) {
+    prod = window.products.find((p) => Number(p.id) === pid);
+  }
   if (!prod) {
-    showToast('Product not found');
+    showToast('Product not found. Please refresh.');
     return;
   }
 
-  const existing = cart.find((item) => Number(item.id) === Number(productId));
+  const existing = cart.find((item) => Number(item.id) === pid);
   if (existing) {
     existing.qty += 1;
   } else {
@@ -116,23 +130,25 @@ function addToCart(productId) {
 }
 
 function changeQty(productId, delta) {
-  const item = cart.find((i) => Number(i.id) === Number(productId));
+  const pid = Number(productId);
+  const item = cart.find((i) => Number(i.id) === pid);
   if (!item) return;
-  item.qty += delta;
+  item.qty += Number(delta);
   if (item.qty <= 0) {
-    cart = cart.filter((i) => Number(i.id) !== Number(productId));
+    cart = cart.filter((i) => Number(i.id) !== pid);
   }
   saveCart();
 }
 
 function removeFromCart(productId) {
-  cart = cart.filter((i) => Number(i.id) !== Number(productId));
+  const pid = Number(productId);
+  cart = cart.filter((i) => Number(i.id) !== pid);
   saveCart();
 }
 
 function ensureFilterControls() {
   const grid = document.getElementById('productGrid') || document.querySelector('.product-grid');
-  if (!grid || document.getElementById('kinboFilterBar')) return;
+  if (!grid || !grid.parentNode || document.getElementById('kinboFilterBar')) return;
 
   const bar = document.createElement('div');
   bar.id = 'kinboFilterBar';
@@ -242,7 +258,7 @@ function renderProducts(list) {
             <p class="product-desc">${escapeHtml(p.description)}</p>
             <div class="product-foot">
               <span class="price">৳${Number(p.price).toLocaleString()}</span>
-              <button type="button" class="btn-primary" onclick="addToCart(${p.id})">Add to Bag</button>
+              <button type="button" class="btn-primary add-to-bag-btn" data-add-product="${p.id}">Add to Bag</button>
             </div>
           </div>
         </article>
@@ -272,6 +288,7 @@ async function fetchProducts() {
     const res = await fetch(`${API_BASE}/products${queryStr}`);
     if (!res.ok) throw new Error('Failed to load products');
     allProducts = await res.json();
+    window.products = allProducts;
     applyClientFiltersAndRender();
   } catch (err) {
     if (grid) {
@@ -285,7 +302,8 @@ function getAdminSectionElement() {
     document.getElementById('adminSection') ||
     document.getElementById('adminPanel') ||
     document.getElementById('adminView') ||
-    document.querySelector('[data-admin-panel]')
+    document.getElementById('adminDashboard') ||
+    document.querySelector('[data-admin-panel], [data-admin-section], .admin-panel, .admin-section')
   );
 }
 
@@ -297,20 +315,38 @@ function getStorefrontElements() {
   if (explicit) return [explicit];
 
   const adminSec = getAdminSectionElement();
-  const mains = Array.from(document.querySelectorAll('main, section'));
-  return mains.filter((el) => el !== adminSec && !el.contains(adminSec));
+  const candidates = Array.from(document.querySelectorAll('main, section'));
+  return candidates.filter((el) => {
+    if (!el || el === adminSec) return false;
+    if (adminSec && (el.contains(adminSec) || adminSec.contains(el))) return false;
+    const idLower = (el.id || '').toLowerCase();
+    const clsLower = (el.className || '').toString().toLowerCase();
+    if (idLower.includes('modal') || clsLower.includes('modal')) return false;
+    return true;
+  });
+}
+
+function closeAllModals() {
+  const modalSelectors = [
+    '#adminLoginModal',
+    '#adminModal',
+    '#authModal',
+    '#loginModal',
+    '[data-admin-modal]',
+    '.modal',
+  ];
+  document.querySelectorAll(modalSelectors.join(',')).forEach((m) => {
+    if (m.id === 'cartDrawer') return;
+    setVisible(m, false);
+  });
 }
 
 function openMainStorefront() {
   const adminSec = getAdminSectionElement();
-  if (adminSec) {
-    adminSec.classList.add('hidden');
-    adminSec.style.display = 'none';
-  }
+  setVisible(adminSec, false);
 
   getStorefrontElements().forEach((el) => {
-    el.classList.remove('hidden');
-    el.style.display = '';
+    setVisible(el, true, '');
   });
 
   fetchProducts();
@@ -326,8 +362,11 @@ function ensureBackToStoreButton(adminSec) {
   btn.type = 'button';
   btn.textContent = '← Back to Main Store';
   btn.style.cssText =
-    'padding:10px 16px;border-radius:10px;border:1px solid #374151;background:#111827;color:#ffffff;font-weight:600;cursor:pointer;margin:0 0 16px 0;display:inline-flex;align-items:center;gap:6px;';
-  btn.addEventListener('click', openMainStorefront);
+    'padding:10px 16px;border-radius:10px;border:1px solid #374151;background:#111827;color:#ffffff;font-weight:600;cursor:pointer;margin:0 0 16px 0;display:inline-flex;align-items:center;gap:6px;position:relative;z-index:20;';
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    openMainStorefront();
+  });
 
   adminSec.prepend(btn);
 }
@@ -339,30 +378,39 @@ function openAdminPanel() {
     return;
   }
 
+  closeAllModals();
+  toggleCartDrawer(false);
+
   getStorefrontElements().forEach((el) => {
-    el.classList.add('hidden');
-    el.style.display = 'none';
+    setVisible(el, false);
   });
 
-  adminSec.classList.remove('hidden');
-  adminSec.style.display = 'block';
+  setVisible(adminSec, true, 'block');
   ensureBackToStoreButton(adminSec);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   loadAdminData();
 }
 
 function toggleCartDrawer(forceOpen) {
-  const drawer = document.getElementById('cartDrawer') || document.querySelector('.cart-drawer');
-  const backdrop = document.getElementById('drawerBackdrop') || document.querySelector('.drawer-backdrop');
+  const drawer =
+    document.getElementById('cartDrawer') ||
+    document.getElementById('cartModal') ||
+    document.querySelector('.cart-drawer');
+  const backdrop =
+    document.getElementById('drawerBackdrop') ||
+    document.getElementById('cartBackdrop') ||
+    document.querySelector('.drawer-backdrop');
   if (!drawer) return;
 
-  const isCurrentlyHidden = drawer.classList.contains('hidden') || getComputedStyle(drawer).display === 'none';
-  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isCurrentlyHidden;
+  const isHidden = drawer.classList.contains('hidden') || getComputedStyle(drawer).display === 'none';
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isHidden;
 
-  drawer.classList.toggle('hidden', !shouldOpen);
-  drawer.style.display = shouldOpen ? 'block' : 'none';
+  setVisible(drawer, shouldOpen, 'block');
   if (backdrop) {
-    backdrop.classList.toggle('hidden', !shouldOpen);
-    backdrop.style.display = shouldOpen ? 'block' : 'none';
+    setVisible(backdrop, shouldOpen, 'block');
+  }
+  if (shouldOpen) {
+    updateCartUI();
   }
 }
 
@@ -373,9 +421,27 @@ async function handleCheckout(e) {
     return;
   }
 
-  const customer_name = document.getElementById('checkoutName')?.value.trim() || '';
-  const phone = document.getElementById('checkoutPhone')?.value.trim() || '';
-  const address = document.getElementById('checkoutAddress')?.value.trim() || '';
+  const nameInput =
+    document.getElementById('checkoutName') ||
+    e.target.querySelector('input[name="customer_name"], input[name="name"], input[type="text"]');
+  const phoneInput =
+    document.getElementById('checkoutPhone') ||
+    e.target.querySelector('input[name="phone"], input[type="tel"]');
+  const addressInput =
+    document.getElementById('checkoutAddress') ||
+    e.target.querySelector('textarea[name="address"], input[name="address"], textarea');
+
+  const customer_name = (nameInput?.value || '').trim();
+  const phone = (phoneInput?.value || '').trim();
+  const address = (addressInput?.value || '').trim();
+
+  if (!customer_name || !phone || !address) {
+    showToast('Please enter name, phone, and address');
+    return;
+  }
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
 
   try {
     const res = await fetch(`${API_BASE}/orders`, {
@@ -389,7 +455,7 @@ async function handleCheckout(e) {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Order failed');
+    if (!res.ok) throw new Error(data.error || 'Could not place order');
 
     cart = [];
     saveCart();
@@ -401,7 +467,9 @@ async function handleCheckout(e) {
     showToast(`Order placed! Code: ${data.order_code}`);
     trackOrderByCode(data.order_code);
   } catch (err) {
-    showToast(err.message);
+    showToast(err.message || 'Order failed');
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 
@@ -411,8 +479,7 @@ async function trackOrderByCode(codeOverride) {
   const code = (codeOverride || input?.value || '').trim().toUpperCase();
   if (!code || !resultBox) return;
 
-  resultBox.classList.remove('hidden');
-  resultBox.style.display = 'block';
+  setVisible(resultBox, true, 'block');
   resultBox.innerHTML = 'Checking order status...';
 
   try {
@@ -456,11 +523,7 @@ async function handleCustomerAuth(e, mode = 'login') {
 
     const accBtn = document.getElementById('accountBtn');
     if (accBtn) accBtn.textContent = customerUser.name;
-    const modal = document.getElementById('authModal');
-    if (modal) {
-      modal.classList.add('hidden');
-      modal.style.display = 'none';
-    }
+    setVisible(document.getElementById('authModal'), false);
     showToast(`Welcome, ${customerUser.name}`);
   } catch (err) {
     showToast(err.message);
@@ -469,8 +532,16 @@ async function handleCustomerAuth(e, mode = 'login') {
 
 async function handleAdminLogin(e) {
   e.preventDefault();
-  const email = document.getElementById('adminEmail')?.value.trim() || '';
-  const password = document.getElementById('adminPassword')?.value || '';
+  const form = e.target;
+  const emailInput =
+    document.getElementById('adminEmail') ||
+    form.querySelector('input[type="email"], input[name="email"]');
+  const passInput =
+    document.getElementById('adminPassword') ||
+    form.querySelector('input[type="password"], input[name="password"]');
+
+  const email = (emailInput?.value || '').trim();
+  const password = passInput?.value || '';
 
   try {
     const res = await fetch(`${API_BASE}/auth/login`, {
@@ -480,307 +551,6 @@ async function handleAdminLogin(e) {
     });
     const data = await res.json();
     if (!res.ok || data.user?.role !== 'admin') {
-      throw new Error('Invalid admin credentials');
+      throw new Error(data.error || 'Invalid admin credentials');
     }
-
-    adminToken = data.token;
-    localStorage.setItem('kinbo_admin_token', adminToken);
-    const modal =
-      document.getElementById('adminLoginModal') ||
-      document.getElementById('adminModal') ||
-      document.querySelector('[data-admin-modal]');
-    if (modal) {
-      modal.classList.add('hidden');
-      modal.style.display = 'none';
-    }
-    openAdminPanel();
-    showToast('Admin panel unlocked');
-  } catch (err) {
-    showToast(err.message);
-  }
-}
-
-async function loadAdminData() {
-  if (!adminToken) return;
-  const headers = { Authorization: `Bearer ${adminToken}` };
-
-  try {
-    const [prodRes, ordRes] = await Promise.all([
-      fetch(`${API_BASE}/admin/products`, { headers }),
-      fetch(`${API_BASE}/admin/orders`, { headers }),
-    ]);
-
-    if (prodRes.status === 401 || ordRes.status === 401) {
-      adminToken = null;
-      localStorage.removeItem('kinbo_admin_token');
-      showToast('Session expired. Please log in as admin again.');
-      const modal =
-        document.getElementById('adminLoginModal') ||
-        document.getElementById('adminModal') ||
-        document.querySelector('[data-admin-modal]');
-      if (modal) {
-        modal.classList.remove('hidden');
-        modal.style.display = 'flex';
-        modal.style.zIndex = '9999';
-      }
-      return;
-    }
-
-    if (prodRes.ok) {
-      const adminProds = await prodRes.json();
-      const tbody = document.getElementById('adminProductsBody');
-      if (tbody) {
-        tbody.innerHTML = adminProds
-          .map(
-            (p) => `
-              <tr>
-                <td>${escapeHtml(p.title)}</td>
-                <td>${escapeHtml(p.category)}</td>
-                <td>৳${Number(p.price).toLocaleString()}</td>
-                <td>${p.stock}</td>
-                <td><button type="button" onclick="deleteAdminProduct(${p.id})">Delete</button></td>
-              </tr>
-            `
-          )
-          .join('');
-      }
-    }
-
-    if (ordRes.ok) {
-      const adminOrds = await ordRes.json();
-      const tbody = document.getElementById('adminOrdersBody');
-      if (tbody) {
-        tbody.innerHTML = adminOrds
-          .map(
-            (o) => `
-              <tr>
-                <td>${escapeHtml(o.order_code)}</td>
-                <td>${escapeHtml(o.customer_name)}</td>
-                <td>৳${Number(o.total_amount).toLocaleString()}</td>
-                <td>
-                  <select onchange="updateOrderStatus(${o.id}, this.value)">
-                    ${['Placed', 'Confirmed', 'Shipped', 'Delivered']
-                      .map(
-                        (st) =>
-                          `<option value="${st}" ${o.status === st ? 'selected' : ''}>${st}</option>`
-                      )
-                      .join('')}
-                  </select>
-                </td>
-              </tr>
-            `
-          )
-          .join('');
-      }
-    }
-  } catch (err) {
-    showToast('Could not load admin data');
-  }
-}
-
-async function handleAddProduct(e) {
-  e.preventDefault();
-  if (!adminToken) {
-    showToast('Please login as admin first');
-    return;
-  }
-
-  const payload = {
-    title: document.getElementById('newProdTitle')?.value.trim() || '',
-    category: document.getElementById('newProdCategory')?.value.trim() || 'Apparel',
-    price: Number(document.getElementById('newProdPrice')?.value || 0),
-    stock: Number(document.getElementById('newProdStock')?.value || 10),
-    badge: document.getElementById('newProdBadge')?.value.trim() || '',
-    image_url: document.getElementById('newProdImage')?.value.trim() || '',
-    description: document.getElementById('newProdDesc')?.value.trim() || '',
-  };
-
-  try {
-    const res = await fetch(`${API_BASE}/admin/products`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${adminToken}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not add product');
-
-    e.target.reset();
-    showToast('New product added');
-    loadAdminData();
-    fetchProducts();
-  } catch (err) {
-    showToast(err.message);
-  }
-}
-
-async function deleteAdminProduct(id) {
-  if (!adminToken) return;
-  try {
-    const res = await fetch(`${API_BASE}/admin/products/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    if (res.ok) {
-      showToast('Product deleted');
-      loadAdminData();
-      fetchProducts();
-    }
-  } catch (_) {}
-}
-
-async function updateOrderStatus(orderId, status) {
-  if (!adminToken) return;
-  try {
-    const res = await fetch(`${API_BASE}/admin/orders/${orderId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${adminToken}`,
-      },
-      body: JSON.stringify({ status }),
-    });
-    if (res.ok) {
-      showToast(`Order status updated to ${status}`);
-    }
-  } catch (_) {}
-}
-
-function findAdminTrigger() {
-  return (
-    document.getElementById('adminOpenBtn') ||
-    document.getElementById('adminBtn') ||
-    document.getElementById('openAdminBtn') ||
-    document.querySelector('[data-admin-btn], [data-open-admin], [href="#admin"]') ||
-    Array.from(document.querySelectorAll('button, a')).find((el) =>
-      /\badmin\b/i.test((el.textContent || '').trim())
-    )
-  );
-}
-
-function showAdminLoginOrPanel() {
-  if (adminToken) {
-    openAdminPanel();
-    return;
-  }
-
-  const modal =
-    document.getElementById('adminLoginModal') ||
-    document.getElementById('adminModal') ||
-    document.querySelector('[data-admin-modal]');
-
-  if (modal) {
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex';
-    modal.style.zIndex = '9999';
-  } else {
-    openAdminPanel();
-  }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.cat-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.cat-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedCategory = btn.dataset.category || btn.textContent.trim() || 'All';
-      fetchProducts();
-    });
-  });
-
-  document.getElementById('searchInput')?.addEventListener('input', () => {
-    clearTimeout(window._searchTimer);
-    window._searchTimer = setTimeout(fetchProducts, 250);
-  });
-
-  const cartTrigger =
-    document.getElementById('cartBtn') ||
-    document.getElementById('openCartBtn') ||
-    document.querySelector('[data-cart-btn]');
-  cartTrigger?.addEventListener('click', (e) => {
-    e.preventDefault();
-    toggleCartDrawer(true);
-  });
-
-  document.getElementById('closeCartBtn')?.addEventListener('click', () => toggleCartDrawer(false));
-  document.getElementById('drawerBackdrop')?.addEventListener('click', () => toggleCartDrawer(false));
-  document.getElementById('checkoutForm')?.addEventListener('submit', handleCheckout);
-  document.getElementById('trackBtn')?.addEventListener('click', () => trackOrderByCode());
-
-  const accTrigger =
-    document.getElementById('accountBtn') ||
-    document.getElementById('loginBtn') ||
-    document.querySelector('[data-account-btn]');
-  accTrigger?.addEventListener('click', (e) => {
-    e.preventDefault();
-    if (customerUser) {
-      showToast(`Signed in as ${customerUser.name}`);
-      return;
-    }
-    const modal = document.getElementById('authModal');
-    if (modal) {
-      modal.classList.remove('hidden');
-      modal.style.display = 'flex';
-      modal.style.zIndex = '9999';
-    }
-  });
-
-  document.getElementById('closeAuthModal')?.addEventListener('click', () => {
-    const modal = document.getElementById('authModal');
-    if (modal) {
-      modal.classList.add('hidden');
-      modal.style.display = 'none';
-    }
-  });
-  document.getElementById('authForm')?.addEventListener('submit', (e) => handleCustomerAuth(e, 'login'));
-
-  const adminTrigger = findAdminTrigger();
-  if (adminTrigger) {
-    adminTrigger.style.cursor = 'pointer';
-    adminTrigger.style.position = 'relative';
-    adminTrigger.style.zIndex = '50';
-    adminTrigger.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      showAdminLoginOrPanel();
-    });
-  }
-
-  document.addEventListener('click', (e) => {
-    const target = e.target.closest('#adminOpenBtn, #adminBtn, #openAdminBtn, [data-admin-btn]');
-    if (target) {
-      e.preventDefault();
-      showAdminLoginOrPanel();
-    }
-  });
-
-  document.getElementById('closeAdminModal')?.addEventListener('click', () => {
-    const modal =
-      document.getElementById('adminLoginModal') ||
-      document.getElementById('adminModal') ||
-      document.querySelector('[data-admin-modal]');
-    if (modal) {
-      modal.classList.add('hidden');
-      modal.style.display = 'none';
-    }
-  });
-
-  const adminForm =
-    document.getElementById('adminLoginForm') ||
-    document.querySelector('#adminLoginModal form, #adminModal form');
-  adminForm?.addEventListener('submit', handleAdminLogin);
-
-  document.getElementById('addProductForm')?.addEventListener('submit', handleAddProduct);
-  document.getElementById('backToStoreBtn')?.addEventListener('click', openMainStorefront);
-  document.getElementById('brandHomeBtn')?.addEventListener('click', openMainStorefront);
-
-  if (customerUser) {
-    const accBtn = document.getElementById('accountBtn');
-    if (accBtn) accBtn.textContent = customerUser.name;
-  }
-
-  updateCartUI();
-  fetchProducts();
-});
+    
