@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>kinbo — Drop, Flex, Repeat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient-glow"></div>
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="brand" onclick="switchView('store')">
+      <span class="brand-mark">K</span>
+      <div>
+        <div class="brand-name">kinbo<span class="brand-dot">.</span></div>
+        <div class="brand-sub">YOUTH DROP STUDIO</div>
+      </div>
+    </div>
+
+    <div class="search-pill">
+      <input id="searchInput" type="text" placeholder="Search hoodies, gear, room vibe..." oninput="renderProducts()" />
+    </div>
+
+    <div class="top-actions">
+      <button class="chip-btn" id="accountBtn" onclick="openAccountModal()">Account</button>
+      <button class="chip-btn ghost-btn" onclick="switchView('admin')">Admin</button>
+      <button class="bag-btn" onclick="toggleCart(true)">
+        <span>Bag</span>
+        <span class="bag-count" id="bagCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- STOREFRONT VIEW -->
+  <main id="storeView" class="container">
+    <!-- Bento Hero -->
+    <section class="bento-hero">
+      <div class="bento-card hero-main">
+        <span class="pill-badge">FRESH ROTATION • 15–30 ONLY</span>
+        <h1>Stuff that hits different.<br/><span>Zero boring aisles.</span></h1>
+        <p>Streetwear, pocket tech, everyday carry, and desk upgrades. Order in seconds as a guest or save your drops with an account.</p>
+        <div class="hero-cta-row">
+          <a href="#catalog" class="primary-btn">Explore Drops</a>
+          <button class="secondary-btn" onclick="openTrackModal()">Track Order</button>
+        </div>
+      </div>
+
+      <div class="bento-card hero-side-top">
+        <div class="mono-label">NO-ACCOUNT EXPRESS</div>
+        <h3>Guest Checkout Ready</h3>
+        <p>Just drop your name, phone & address—get an instant <code>KNB-XXXXXX</code> code.</p>
+      </div>
+
+      <div class="bento-card hero-side-bottom">
+        <div class="mono-label">FAST DISPATCH</div>
+        <h3>Same-Day Pack</h3>
+        <p>Curated small-batch drops updated live from the kinbo studio.</p>
+      </div>
+    </section>
+
+    <!-- Category Filter Bar -->
+    <section id="catalog" class="catalog-section">
+      <div class="section-head">
+        <h2>Latest Drops</h2>
+        <div class="filter-pills" id="categoryPills"></div>
+      </div>
+
+      <div id="productGrid" class="product-grid"></div>
+    </section>
+  </main>
+
+  <!-- ADMIN VIEW -->
+  <main id="adminView" class="container hidden">
+    <div id="adminLoginBox" class="admin-auth-card">
+      <span class="pill-badge">PROTECTED ACCESS</span>
+      <h2>kinbo Admin Login</h2>
+      <p>Sign in to manage drops, stock, and customer orders.</p>
+      <form onsubmit="handleAdminLogin(event)">
+        <label>Email</label>
+        <input id="adminEmail" type="email" value="admin@kinbo.com" required />
+        <label>Password</label>
+        <input id="adminPassword" type="password" value="admin123" required />
+        <button type="submit" class="primary-btn full-w">Enter Admin Panel</button>
+      </form>
+    </div>
+
+    <div id="adminDashboard" class="hidden">
+      <div class="admin-header">
+        <div>
+          <span class="pill-badge">COMMAND DECK</span>
+          <h2>kinbo Studio Admin</h2>
+        </div>
+        <button class="chip-btn" onclick="logoutAdmin()">Logout</button>
+      </div>
+
+      <div class="kpi-row" id="adminKpis"></div>
+
+      <div class="admin-grid">
+        <div class="bento-card">
+          <h3>Add New Product</h3>
+          <form id="addProductForm" onsubmit="handleAddProduct(event)" class="stack-form">
+            <input id="pName" type="text" placeholder="Product Name" required />
+            <div class="two-col">
+              <input id="pCategory" type="text" placeholder="Category (e.g. Streetwear)" required />
+              <input id="pPrice" type="number" step="0.01" placeholder="Price (BDT)" required />
+            </div>
+            <div class="two-col">
+              <input id="pStock" type="number" value="15" placeholder="Stock" required />
+              <input id="pTag" type="text" value="NEW DROP" placeholder="Tag" />
+            </div>
+            <input id="pImage" type="url" placeholder="Image URL (https://...)" required />
+            <button type="submit" class="primary-btn">Publish Drop</button>
+          </form>
+        </div>
+
+        <div class="bento-card">
+          <h3>Live Inventory</h3>
+          <div id="adminProductList" class="admin-list"></div>
+        </div>
+      </div>
+
+      <div class="bento-card mt-24">
+        <h3>Incoming Orders (Guest & Account)</h3>
+        <div id="adminOrderList" class="orders-table-wrap"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- SLIDE-OVER CART DRAWER -->
+  <div id="cartBackdrop" class="drawer-backdrop hidden" onclick="toggleCart(false)"></div>
+  <aside id="cartDrawer" class="cart-drawer">
+    <div class="drawer-head">
+      <h3>Your Bag</h3>
+      <button class="icon-btn" onclick="toggleCart(false)">✕</button>
+    </div>
+    <div id="cartItems" class="drawer-body"></div>
+    <div class="drawer-foot">
+      <div class="total-line">
+        <span>Subtotal</span>
+        <strong id="cartTotal">৳0</strong>
+      </div>
+      <button class="primary-btn full-w" onclick="openCheckoutModal()">Checkout (Guest or Account)</button>
+    </div>
+  </aside>
+
+  <!-- CHECKOUT MODAL (GUEST + ACCOUNT) -->
+  <div id="checkoutModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Express Checkout</h3>
+        <button class="icon-btn" onclick="closeModals()">✕</button>
+      </div>
+      <p id="checkoutModeBadge" class="muted-text"></p>
+      <form onsubmit="submitOrder(event)" class="stack-form">
+        <input id="cName" type="text" placeholder="Full Name" required />
+        <input id="cPhone" type="tel" placeholder="Phone Number (e.g. 017XXXXXXXX)" required />
+        <textarea id="cAddress" rows="3" placeholder="Delivery Address (House, Road, Area, City)" required></textarea>
+        <div class="total-line">
+          <span>Total Payable (COD)</span>
+          <strong id="modalTotal">৳0</strong>
+        </div>
+        <button type="submit" class="primary-btn full-w">Place Order Now</button>
+      </form>
+      <div id="orderSuccessBox" class="success-box hidden"></div>
+    </div>
+  </div>
+
+  <!-- ACCOUNT MODAL -->
+  <div id="accountModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>kinbo Account</h3>
+        <button class="icon-btn" onclick="closeModals()">✕</button>
+      </div>
+      <div id="accountContent"></div>
+    </div>
+  </div>
+
+  <!-- ORDER TRACK MODAL -->
+  <div id="trackModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Track Your Order</h3>
+        <button class="icon-btn" onclick="closeModals()">✕</button>
+      </div>
+      <p class="muted-text">Enter the Order Code you received after checkout (e.g. <code>KNB-A1B2C3</code>).</p>
+      <div class="row-gap">
+        <input id="trackCodeInput" type="text" placeholder="KNB-XXXXXX" />
+        <button class="primary-btn" onclick="lookupOrder()">Track</button>
+      </div>
+      <div id="trackResult" class="mt-16"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
