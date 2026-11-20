@@ -1,7 +1,6 @@
 const API_BASE = 'https://kinbo-api-0wdb.onrender.com/api';
 
-let allProducts = [];
-let filteredProducts = [];
+let products = [];
 let selectedCategory = 'All';
 let selectedPriceFilter = 'ALL';
 let selectedSort = 'default';
@@ -20,13 +19,12 @@ function showToast(msg) {
   }
   el.textContent = msg;
   el.classList.remove('hidden');
-  el.style.cssText =
-    'position:fixed;bottom:20px;right:20px;background:#111827;color:#ffffff;padding:11px 16px;border-radius:10px;z-index:99999;font-size:14px;font-weight:500;box-shadow:0 10px 25px rgba(0,0,0,0.25);display:block;';
+  el.style.display = 'block';
   clearTimeout(window._toastTimer);
   window._toastTimer = setTimeout(() => {
     el.classList.add('hidden');
     el.style.display = 'none';
-  }, 2800);
+  }, 2600);
 }
 
 function escapeHtml(str = '') {
@@ -37,44 +35,23 @@ function escapeHtml(str = '') {
     .replace(/"/g, '&quot;');
 }
 
-function setVisible(el, visible, displayType = 'block') {
-  if (!el) return;
-  if (visible) {
-    el.classList.remove('hidden', 'hide', 'd-none');
-    el.style.setProperty('display', displayType, 'important');
-  } else {
-    el.classList.add('hidden');
-    el.style.setProperty('display', 'none', 'important');
-  }
-}
-
 function saveCart() {
   localStorage.setItem('kinbo_cart', JSON.stringify(cart));
   updateCartUI();
 }
 
 function updateCartUI() {
-  const countEl =
-    document.getElementById('cartCount') ||
-    document.querySelector('[data-cart-count]') ||
-    document.querySelector('.cart-count');
+  const countEl = document.getElementById('cartCount');
   const totalCount = cart.reduce((sum, item) => sum + Number(item.qty || 1), 0);
   if (countEl) countEl.textContent = totalCount;
 
-  const listEl =
-    document.getElementById('cartItems') ||
-    document.getElementById('cartList') ||
-    document.querySelector('.cart-items');
-  const subtotalEl =
-    document.getElementById('cartSubtotal') ||
-    document.getElementById('cartTotal') ||
-    document.querySelector('.cart-subtotal');
-
-  if (!listEl) return;
+  const listEl = document.getElementById('cartItems');
+  const subtotalEl = document.getElementById('cartSubtotal');
+  if (!listEl || !subtotalEl) return;
 
   if (!cart.length) {
-    listEl.innerHTML = '<p class="empty-state">Your bag is empty. Add an item to get started.</p>';
-    if (subtotalEl) subtotalEl.textContent = '৳0';
+    listEl.innerHTML = '<p class="empty-state">Your bag is empty. Add a youth drop to get started.</p>';
+    subtotalEl.textContent = '৳0';
     return;
   }
 
@@ -85,36 +62,32 @@ function updateCartUI() {
       const qty = Number(item.qty || 1);
       subtotal += price * qty;
       return `
-        <div class="cart-item" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e5e7eb;">
+        <div class="cart-item">
           <div>
             <strong>${escapeHtml(item.title)}</strong>
-            <div style="font-size:13px;opacity:0.75;">৳${price.toLocaleString()} × ${qty}</div>
+            <div class="muted">৳${price.toLocaleString()} × ${qty}</div>
           </div>
-          <div class="cart-actions" style="display:flex;gap:6px;align-items:center;">
-            <button type="button" data-cart-dec="${item.id}" style="padding:4px 9px;cursor:pointer;">-</button>
-            <button type="button" data-cart-inc="${item.id}" style="padding:4px 9px;cursor:pointer;">+</button>
-            <button type="button" data-cart-rem="${item.id}" style="padding:4px 9px;cursor:pointer;">✕</button>
+          <div class="cart-actions">
+            <button type="button" onclick="changeQty(${item.id}, -1)">-</button>
+            <button type="button" onclick="changeQty(${item.id}, 1)">+</button>
+            <button type="button" onclick="removeFromCart(${item.id})">✕</button>
           </div>
         </div>
       `;
     })
     .join('');
 
-  if (subtotalEl) subtotalEl.textContent = `৳${subtotal.toLocaleString()}`;
+  subtotalEl.textContent = `৳${subtotal.toLocaleString()}`;
 }
 
 function addToCart(productId) {
-  const pid = Number(productId);
-  let prod = allProducts.find((p) => Number(p.id) === pid);
-  if (!prod && Array.isArray(window.products)) {
-    prod = window.products.find((p) => Number(p.id) === pid);
-  }
+  const prod = products.find((p) => Number(p.id) === Number(productId));
   if (!prod) {
-    showToast('Product not found. Please refresh.');
+    showToast('Product not found');
     return;
   }
 
-  const existing = cart.find((item) => Number(item.id) === pid);
+  const existing = cart.find((item) => Number(item.id) === Number(productId));
   if (existing) {
     existing.qty += 1;
   } else {
@@ -130,84 +103,89 @@ function addToCart(productId) {
 }
 
 function changeQty(productId, delta) {
-  const pid = Number(productId);
-  const item = cart.find((i) => Number(i.id) === pid);
+  const item = cart.find((i) => Number(i.id) === Number(productId));
   if (!item) return;
   item.qty += Number(delta);
   if (item.qty <= 0) {
-    cart = cart.filter((i) => Number(i.id) !== pid);
+    cart = cart.filter((i) => Number(i.id) !== Number(productId));
   }
   saveCart();
 }
 
 function removeFromCart(productId) {
-  const pid = Number(productId);
-  cart = cart.filter((i) => Number(i.id) !== pid);
+  cart = cart.filter((i) => Number(i.id) !== Number(productId));
   saveCart();
 }
 
-function ensureFilterControls() {
-  const grid = document.getElementById('productGrid') || document.querySelector('.product-grid');
-  if (!grid || !grid.parentNode || document.getElementById('kinboFilterBar')) return;
+function ensureProductFilterBar() {
+  const grid = document.getElementById('productGrid');
+  if (!grid || !grid.parentNode || document.getElementById('productFilterBar')) return;
 
   const bar = document.createElement('div');
-  bar.id = 'kinboFilterBar';
+  bar.id = 'productFilterBar';
+  bar.className = 'filter-bar';
   bar.style.cssText =
-    'display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:14px 0 18px;padding:12px 14px;border-radius:12px;background:#f9fafb;border:1px solid #e5e7eb;color:#111827;';
+    'display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:12px 0 18px;padding:10px 14px;border-radius:10px;border:1px solid rgba(128,128,128,0.25);';
 
   bar.innerHTML = `
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-      <strong style="font-size:13px;">Filter:</strong>
-      <select id="priceFilterSelect" style="padding:7px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#111827;">
+      <label for="priceFilterSelect" style="font-size:13px;font-weight:600;">Price:</label>
+      <select id="priceFilterSelect" style="padding:6px 10px;border-radius:8px;">
         <option value="ALL">All Prices</option>
         <option value="UNDER_1500">Under ৳1,500</option>
         <option value="1500_2500">৳1,500 – ৳2,500</option>
         <option value="ABOVE_2500">Above ৳2,500</option>
       </select>
-      <select id="sortSelect" style="padding:7px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#111827;">
-        <option value="default">Sort: Featured</option>
+
+      <label for="sortSelect" style="font-size:13px;font-weight:600;">Sort:</label>
+      <select id="sortSelect" style="padding:6px 10px;border-radius:8px;">
+        <option value="default">Featured</option>
         <option value="price_asc">Price: Low to High</option>
         <option value="price_desc">Price: High to Low</option>
         <option value="name_asc">Name: A to Z</option>
       </select>
-      <button type="button" id="resetFiltersBtn" style="padding:7px 12px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#111827;cursor:pointer;font-size:13px;">
-        Reset
-      </button>
+
+      <button type="button" id="resetFilterBtn" style="padding:6px 12px;border-radius:8px;cursor:pointer;">Reset</button>
     </div>
-    <div id="productCountLabel" style="font-size:13px;font-weight:600;color:#374151;"></div>
+    <span id="filterResultCount" style="font-size:13px;opacity:0.85;"></span>
   `;
 
   grid.parentNode.insertBefore(bar, grid);
 
   document.getElementById('priceFilterSelect')?.addEventListener('change', (e) => {
     selectedPriceFilter = e.target.value;
-    applyClientFiltersAndRender();
+    applyFiltersAndRender();
   });
 
   document.getElementById('sortSelect')?.addEventListener('change', (e) => {
     selectedSort = e.target.value;
-    applyClientFiltersAndRender();
+    applyFiltersAndRender();
   });
 
-  document.getElementById('resetFiltersBtn')?.addEventListener('click', () => {
+  document.getElementById('resetFilterBtn')?.addEventListener('click', () => {
     selectedCategory = 'All';
     selectedPriceFilter = 'ALL';
     selectedSort = 'default';
-    document.querySelectorAll('.cat-btn').forEach((btn, i) => {
-      btn.classList.toggle('active', i === 0 || btn.dataset.category === 'All');
+
+    document.querySelectorAll('.cat-btn').forEach((b, idx) => {
+      const cat = b.dataset.category || b.textContent.trim();
+      b.classList.toggle('active', cat === 'All' || (idx === 0 && !b.dataset.category));
     });
-    const searchEl = document.getElementById('searchInput');
-    if (searchEl) searchEl.value = '';
-    const priceEl = document.getElementById('priceFilterSelect');
-    const sortEl = document.getElementById('sortSelect');
-    if (priceEl) priceEl.value = 'ALL';
-    if (sortEl) sortEl.value = 'default';
+
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
+
+    const priceSel = document.getElementById('priceFilterSelect');
+    const sortSel = document.getElementById('sortSelect');
+    if (priceSel) priceSel.value = 'ALL';
+    if (sortSel) sortSel.value = 'default';
+
     fetchProducts();
   });
 }
 
-function applyClientFiltersAndRender() {
-  let list = [...allProducts];
+function getFilteredProducts() {
+  let list = [...products];
 
   if (selectedPriceFilter === 'UNDER_1500') {
     list = list.filter((p) => Number(p.price) < 1500);
@@ -225,16 +203,20 @@ function applyClientFiltersAndRender() {
     list.sort((a, b) => String(a.title).localeCompare(String(b.title)));
   }
 
-  filteredProducts = list;
-  const countLabel = document.getElementById('productCountLabel');
-  if (countLabel) {
-    countLabel.textContent = `${filteredProducts.length} of ${allProducts.length} items shown`;
+  return list;
+}
+
+function applyFiltersAndRender() {
+  const list = getFilteredProducts();
+  const countEl = document.getElementById('filterResultCount');
+  if (countEl) {
+    countEl.textContent = `Showing ${list.length} of ${products.length} items`;
   }
-  renderProducts(filteredProducts);
+  renderProducts(list);
 }
 
 function renderProducts(list) {
-  const grid = document.getElementById('productGrid') || document.querySelector('.product-grid');
+  const grid = document.getElementById('productGrid');
   if (!grid) return;
 
   if (!list.length) {
@@ -258,7 +240,7 @@ function renderProducts(list) {
             <p class="product-desc">${escapeHtml(p.description)}</p>
             <div class="product-foot">
               <span class="price">৳${Number(p.price).toLocaleString()}</span>
-              <button type="button" class="btn-primary add-to-bag-btn" data-add-product="${p.id}">Add to Bag</button>
+              <button type="button" class="btn-primary" onclick="addToCart(${p.id})">Add to Bag</button>
             </div>
           </div>
         </article>
@@ -268,9 +250,9 @@ function renderProducts(list) {
 }
 
 async function fetchProducts() {
-  ensureFilterControls();
-  const grid = document.getElementById('productGrid') || document.querySelector('.product-grid');
-  if (grid && !allProducts.length) {
+  ensureProductFilterBar();
+  const grid = document.getElementById('productGrid');
+  if (grid && !products.length) {
     grid.innerHTML = '<p class="empty-state">Loading kinbo drops...</p>';
   }
 
@@ -287,9 +269,8 @@ async function fetchProducts() {
     const queryStr = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`${API_BASE}/products${queryStr}`);
     if (!res.ok) throw new Error('Failed to load products');
-    allProducts = await res.json();
-    window.products = allProducts;
-    applyClientFiltersAndRender();
+    products = await res.json();
+    applyFiltersAndRender();
   } catch (err) {
     if (grid) {
       grid.innerHTML = '<p class="empty-state">Could not connect to backend API. Please try again in a moment.</p>';
@@ -297,56 +278,60 @@ async function fetchProducts() {
   }
 }
 
-function getAdminSectionElement() {
+function getAdminContainer() {
   return (
     document.getElementById('adminSection') ||
     document.getElementById('adminPanel') ||
-    document.getElementById('adminView') ||
     document.getElementById('adminDashboard') ||
-    document.querySelector('[data-admin-panel], [data-admin-section], .admin-panel, .admin-section')
+    document.querySelector('[data-admin-panel], .admin-panel, .admin-section')
   );
 }
 
-function getStorefrontElements() {
+function getStorefrontContainers() {
   const explicit =
     document.getElementById('storefrontSection') ||
     document.getElementById('mainStorefront') ||
     document.getElementById('storefront');
   if (explicit) return [explicit];
 
-  const adminSec = getAdminSectionElement();
-  const candidates = Array.from(document.querySelectorAll('main, section'));
-  return candidates.filter((el) => {
-    if (!el || el === adminSec) return false;
-    if (adminSec && (el.contains(adminSec) || adminSec.contains(el))) return false;
-    const idLower = (el.id || '').toLowerCase();
-    const clsLower = (el.className || '').toString().toLowerCase();
-    if (idLower.includes('modal') || clsLower.includes('modal')) return false;
+  const adminEl = getAdminContainer();
+  return Array.from(document.querySelectorAll('main, section')).filter((el) => {
+    if (!el || el === adminEl) return false;
+    if (adminEl && (el.contains(adminEl) || adminEl.contains(el))) return false;
+    const cls = (el.className || '').toString().toLowerCase();
+    const id = (el.id || '').toLowerCase();
+    if (cls.includes('modal') || id.includes('modal') || id.includes('drawer')) return false;
     return true;
   });
 }
 
-function closeAllModals() {
-  const modalSelectors = [
-    '#adminLoginModal',
-    '#adminModal',
-    '#authModal',
-    '#loginModal',
-    '[data-admin-modal]',
-    '.modal',
-  ];
-  document.querySelectorAll(modalSelectors.join(',')).forEach((m) => {
-    if (m.id === 'cartDrawer') return;
-    setVisible(m, false);
+function ensureBackToStoreButton(adminEl) {
+  if (!adminEl || document.getElementById('backToStoreBtn')) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'backToStoreBtn';
+  btn.type = 'button';
+  btn.textContent = '← Back to Main Store';
+  btn.style.cssText =
+    'padding:10px 16px;border-radius:10px;border:1px solid #374151;background:#111827;color:#ffffff;font-weight:600;cursor:pointer;margin:0 0 16px 0;display:inline-flex;align-items:center;gap:6px;';
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    openMainStorefront();
   });
+
+  adminEl.prepend(btn);
 }
 
 function openMainStorefront() {
-  const adminSec = getAdminSectionElement();
-  setVisible(adminSec, false);
+  const adminEl = getAdminContainer();
+  if (adminEl) {
+    adminEl.classList.add('hidden');
+    adminEl.style.display = 'none';
+  }
 
-  getStorefrontElements().forEach((el) => {
-    setVisible(el, true, '');
+  getStorefrontContainers().forEach((el) => {
+    el.classList.remove('hidden');
+    el.style.display = '';
   });
 
   fetchProducts();
@@ -354,64 +339,46 @@ function openMainStorefront() {
   showToast('Returned to Kinbo Storefront');
 }
 
-function ensureBackToStoreButton(adminSec) {
-  if (!adminSec || document.getElementById('backToStoreBtn')) return;
-
-  const btn = document.createElement('button');
-  btn.id = 'backToStoreBtn';
-  btn.type = 'button';
-  btn.textContent = '← Back to Main Store';
-  btn.style.cssText =
-    'padding:10px 16px;border-radius:10px;border:1px solid #374151;background:#111827;color:#ffffff;font-weight:600;cursor:pointer;margin:0 0 16px 0;display:inline-flex;align-items:center;gap:6px;position:relative;z-index:20;';
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    openMainStorefront();
-  });
-
-  adminSec.prepend(btn);
-}
-
 function openAdminPanel() {
-  const adminSec = getAdminSectionElement();
-  if (!adminSec) {
-    showToast('Admin panel container not found');
+  const adminEl = getAdminContainer();
+  if (!adminEl) {
+    showToast('Admin section not found');
     return;
   }
 
-  closeAllModals();
-  toggleCartDrawer(false);
-
-  getStorefrontElements().forEach((el) => {
-    setVisible(el, false);
+  // Close login modal if open
+  ['adminLoginModal', 'adminModal'].forEach((id) => {
+    const m = document.getElementById(id);
+    if (m) {
+      m.classList.add('hidden');
+      m.style.display = 'none';
+    }
   });
 
-  setVisible(adminSec, true, 'block');
-  ensureBackToStoreButton(adminSec);
+  getStorefrontContainers().forEach((el) => {
+    el.classList.add('hidden');
+    el.style.display = 'none';
+  });
+
+  adminEl.classList.remove('hidden');
+  adminEl.style.display = 'block';
+  ensureBackToStoreButton(adminEl);
   window.scrollTo({ top: 0, behavior: 'smooth' });
   loadAdminData();
 }
 
 function toggleCartDrawer(forceOpen) {
-  const drawer =
-    document.getElementById('cartDrawer') ||
-    document.getElementById('cartModal') ||
-    document.querySelector('.cart-drawer');
-  const backdrop =
-    document.getElementById('drawerBackdrop') ||
-    document.getElementById('cartBackdrop') ||
-    document.querySelector('.drawer-backdrop');
-  if (!drawer) return;
+  const drawer = document.getElementById('cartDrawer');
+  const backdrop = document.getElementById('drawerBackdrop');
+  if (!drawer || !backdrop) return;
 
-  const isHidden = drawer.classList.contains('hidden') || getComputedStyle(drawer).display === 'none';
-  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isHidden;
+  const isClosed = drawer.classList.contains('hidden') || getComputedStyle(drawer).display === 'none';
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isClosed;
 
-  setVisible(drawer, shouldOpen, 'block');
-  if (backdrop) {
-    setVisible(backdrop, shouldOpen, 'block');
-  }
-  if (shouldOpen) {
-    updateCartUI();
-  }
+  drawer.classList.toggle('hidden', !shouldOpen);
+  drawer.style.display = shouldOpen ? 'block' : 'none';
+  backdrop.classList.toggle('hidden', !shouldOpen);
+  backdrop.style.display = shouldOpen ? 'block' : 'none';
 }
 
 async function handleCheckout(e) {
@@ -421,27 +388,9 @@ async function handleCheckout(e) {
     return;
   }
 
-  const nameInput =
-    document.getElementById('checkoutName') ||
-    e.target.querySelector('input[name="customer_name"], input[name="name"], input[type="text"]');
-  const phoneInput =
-    document.getElementById('checkoutPhone') ||
-    e.target.querySelector('input[name="phone"], input[type="tel"]');
-  const addressInput =
-    document.getElementById('checkoutAddress') ||
-    e.target.querySelector('textarea[name="address"], input[name="address"], textarea');
-
-  const customer_name = (nameInput?.value || '').trim();
-  const phone = (phoneInput?.value || '').trim();
-  const address = (addressInput?.value || '').trim();
-
-  if (!customer_name || !phone || !address) {
-    showToast('Please enter name, phone, and address');
-    return;
-  }
-
-  const submitBtn = e.target.querySelector('button[type="submit"]');
-  if (submitBtn) submitBtn.disabled = true;
+  const customer_name = document.getElementById('checkoutName')?.value.trim() || '';
+  const phone = document.getElementById('checkoutPhone')?.value.trim() || '';
+  const address = document.getElementById('checkoutAddress')?.value.trim() || '';
 
   try {
     const res = await fetch(`${API_BASE}/orders`, {
@@ -455,7 +404,7 @@ async function handleCheckout(e) {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not place order');
+    if (!res.ok) throw new Error(data.error || 'Order failed');
 
     cart = [];
     saveCart();
@@ -467,9 +416,7 @@ async function handleCheckout(e) {
     showToast(`Order placed! Code: ${data.order_code}`);
     trackOrderByCode(data.order_code);
   } catch (err) {
-    showToast(err.message || 'Order failed');
-  } finally {
-    if (submitBtn) submitBtn.disabled = false;
+    showToast(err.message);
   }
 }
 
@@ -479,7 +426,8 @@ async function trackOrderByCode(codeOverride) {
   const code = (codeOverride || input?.value || '').trim().toUpperCase();
   if (!code || !resultBox) return;
 
-  setVisible(resultBox, true, 'block');
+  resultBox.classList.remove('hidden');
+  resultBox.style.display = 'block';
   resultBox.innerHTML = 'Checking order status...';
 
   try {
@@ -523,7 +471,11 @@ async function handleCustomerAuth(e, mode = 'login') {
 
     const accBtn = document.getElementById('accountBtn');
     if (accBtn) accBtn.textContent = customerUser.name;
-    setVisible(document.getElementById('authModal'), false);
+    const modal = document.getElementById('authModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
     showToast(`Welcome, ${customerUser.name}`);
   } catch (err) {
     showToast(err.message);
@@ -532,16 +484,8 @@ async function handleCustomerAuth(e, mode = 'login') {
 
 async function handleAdminLogin(e) {
   e.preventDefault();
-  const form = e.target;
-  const emailInput =
-    document.getElementById('adminEmail') ||
-    form.querySelector('input[type="email"], input[name="email"]');
-  const passInput =
-    document.getElementById('adminPassword') ||
-    form.querySelector('input[type="password"], input[name="password"]');
-
-  const email = (emailInput?.value || '').trim();
-  const password = passInput?.value || '';
+  const email = document.getElementById('adminEmail')?.value.trim() || '';
+  const password = document.getElementById('adminPassword')?.value || '';
 
   try {
     const res = await fetch(`${API_BASE}/auth/login`, {
@@ -553,4 +497,227 @@ async function handleAdminLogin(e) {
     if (!res.ok || data.user?.role !== 'admin') {
       throw new Error(data.error || 'Invalid admin credentials');
     }
-    
+
+    adminToken = data.token;
+    localStorage.setItem('kinbo_admin_token', adminToken);
+    showToast('Admin panel unlocked');
+    openAdminPanel();
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function loadAdminData() {
+  if (!adminToken) return;
+  const headers = { Authorization: `Bearer ${adminToken}` };
+
+  try {
+    const [prodRes, ordRes] = await Promise.all([
+      fetch(`${API_BASE}/admin/products`, { headers }),
+      fetch(`${API_BASE}/admin/orders`, { headers }),
+    ]);
+
+    if (prodRes.status === 401 || ordRes.status === 401) {
+      adminToken = null;
+      localStorage.removeItem('kinbo_admin_token');
+      showToast('Admin session expired. Please log in again.');
+      const modal = document.getElementById('adminLoginModal') || document.getElementById('adminModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+      }
+      return;
+    }
+
+    if (prodRes.ok) {
+      const adminProds = await prodRes.json();
+      const tbody = document.getElementById('adminProductsBody');
+      if (tbody) {
+        tbody.innerHTML = adminProds
+          .map(
+            (p) => `
+              <tr>
+                <td>${escapeHtml(p.title)}</td>
+                <td>${escapeHtml(p.category)}</td>
+                <td>৳${Number(p.price).toLocaleString()}</td>
+                <td>${p.stock}</td>
+                <td><button type="button" onclick="deleteAdminProduct(${p.id})">Delete</button></td>
+              </tr>
+            `
+          )
+          .join('');
+      }
+    }
+
+    if (ordRes.ok) {
+      const adminOrds = await ordRes.json();
+      const tbody = document.getElementById('adminOrdersBody');
+      if (tbody) {
+        tbody.innerHTML = adminOrds
+          .map(
+            (o) => `
+              <tr>
+                <td>${escapeHtml(o.order_code)}</td>
+                <td>${escapeHtml(o.customer_name)}</td>
+                <td>৳${Number(o.total_amount).toLocaleString()}</td>
+                <td>
+                  <select onchange="updateOrderStatus(${o.id}, this.value)">
+                    ${['Placed', 'Confirmed', 'Shipped', 'Delivered']
+                      .map(
+                        (st) =>
+                          `<option value="${st}" ${o.status === st ? 'selected' : ''}>${st}</option>`
+                      )
+                      .join('')}
+                  </select>
+                </td>
+              </tr>
+            `
+          )
+          .join('');
+      }
+    }
+  } catch (_) {}
+}
+
+async function handleAddProduct(e) {
+  e.preventDefault();
+  if (!adminToken) return;
+
+  const payload = {
+    title: document.getElementById('newProdTitle')?.value.trim() || '',
+    category: document.getElementById('newProdCategory')?.value.trim() || 'Apparel',
+    price: Number(document.getElementById('newProdPrice')?.value || 0),
+    stock: Number(document.getElementById('newProdStock')?.value || 10),
+    badge: document.getElementById('newProdBadge')?.value.trim() || '',
+    image_url: document.getElementById('newProdImage')?.value.trim() || '',
+    description: document.getElementById('newProdDesc')?.value.trim() || '',
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/products`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not add product');
+
+    e.target.reset();
+    showToast('New product added');
+    loadAdminData();
+    fetchProducts();
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function deleteAdminProduct(id) {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/admin/products/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    if (res.ok) {
+      showToast('Product deleted');
+      loadAdminData();
+      fetchProducts();
+    }
+  } catch (_) {}
+}
+
+async function updateOrderStatus(orderId, status) {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/admin/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({ status }),
+    });
+    if (res.ok) {
+      showToast(`Order status updated to ${status}`);
+    }
+  } catch (_) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.cat-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.cat-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedCategory = btn.dataset.category || btn.textContent.trim() || 'All';
+      fetchProducts();
+    });
+  });
+
+  document.getElementById('searchInput')?.addEventListener('input', () => {
+    clearTimeout(window._searchTimer);
+    window._searchTimer = setTimeout(fetchProducts, 250);
+  });
+
+  document.getElementById('cartBtn')?.addEventListener('click', () => toggleCartDrawer(true));
+  document.getElementById('closeCartBtn')?.addEventListener('click', () => toggleCartDrawer(false));
+  document.getElementById('drawerBackdrop')?.addEventListener('click', () => toggleCartDrawer(false));
+  document.getElementById('checkoutForm')?.addEventListener('submit', handleCheckout);
+  document.getElementById('trackBtn')?.addEventListener('click', () => trackOrderByCode());
+
+  document.getElementById('accountBtn')?.addEventListener('click', () => {
+    if (customerUser) {
+      showToast(`Signed in as ${customerUser.name}`);
+      return;
+    }
+    const modal = document.getElementById('authModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+    }
+  });
+  document.getElementById('closeAuthModal')?.addEventListener('click', () => {
+    const modal = document.getElementById('authModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
+  });
+  document.getElementById('authForm')?.addEventListener('submit', (e) => handleCustomerAuth(e, 'login'));
+
+  document.getElementById('adminOpenBtn')?.addEventListener('click', () => {
+    if (adminToken) {
+      openAdminPanel();
+    } else {
+      const modal = document.getElementById('adminLoginModal') || document.getElementById('adminModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+      } else {
+        openAdminPanel();
+      }
+    }
+  });
+
+  document.getElementById('closeAdminModal')?.addEventListener('click', () => {
+    const modal = document.getElementById('adminLoginModal') || document.getElementById('adminModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
+  });
+
+  document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
+  document.getElementById('addProductForm')?.addEventListener('submit', handleAddProduct);
+  document.getElementById('backToStoreBtn')?.addEventListener('click', openMainStorefront);
+  document.getElementById('brandHomeBtn')?.addEventListener('click', openMainStorefront);
+
+  if (customerUser && document.getElementById('accountBtn')) {
+    document.getElementById('accountBtn').textContent = customerUser.name;
+  }
+
+  updateCartUI();
+  fetchProducts();
+});
