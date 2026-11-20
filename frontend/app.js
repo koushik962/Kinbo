@@ -4,6 +4,7 @@ let products = [];
 let selectedCategory = 'All';
 let selectedPriceFilter = 'ALL';
 let selectedSort = 'default';
+let authMode = 'login';
 
 let cart = JSON.parse(localStorage.getItem('kinbo_cart') || '[]');
 let customerToken = localStorage.getItem('kinbo_user_token') || null;
@@ -11,19 +12,13 @@ let customerUser = JSON.parse(localStorage.getItem('kinbo_user_info') || 'null')
 let adminToken = localStorage.getItem('kinbo_admin_token') || null;
 
 function showToast(msg) {
-  let el = document.getElementById('toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'toast';
-    document.body.appendChild(el);
-  }
+  const el = document.getElementById('toast');
+  if (!el) return;
   el.textContent = msg;
   el.classList.remove('hidden');
-  el.style.display = 'block';
   clearTimeout(window._toastTimer);
   window._toastTimer = setTimeout(() => {
     el.classList.add('hidden');
-    el.style.display = 'none';
   }, 2600);
 }
 
@@ -117,73 +112,6 @@ function removeFromCart(productId) {
   saveCart();
 }
 
-function ensureProductFilterBar() {
-  const grid = document.getElementById('productGrid');
-  if (!grid || !grid.parentNode || document.getElementById('productFilterBar')) return;
-
-  const bar = document.createElement('div');
-  bar.id = 'productFilterBar';
-  bar.className = 'filter-bar';
-  bar.style.cssText =
-    'display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:12px 0 18px;padding:10px 14px;border-radius:10px;border:1px solid rgba(128,128,128,0.25);';
-
-  bar.innerHTML = `
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-      <label for="priceFilterSelect" style="font-size:13px;font-weight:600;">Price:</label>
-      <select id="priceFilterSelect" style="padding:6px 10px;border-radius:8px;">
-        <option value="ALL">All Prices</option>
-        <option value="UNDER_1500">Under ৳1,500</option>
-        <option value="1500_2500">৳1,500 – ৳2,500</option>
-        <option value="ABOVE_2500">Above ৳2,500</option>
-      </select>
-
-      <label for="sortSelect" style="font-size:13px;font-weight:600;">Sort:</label>
-      <select id="sortSelect" style="padding:6px 10px;border-radius:8px;">
-        <option value="default">Featured</option>
-        <option value="price_asc">Price: Low to High</option>
-        <option value="price_desc">Price: High to Low</option>
-        <option value="name_asc">Name: A to Z</option>
-      </select>
-
-      <button type="button" id="resetFilterBtn" style="padding:6px 12px;border-radius:8px;cursor:pointer;">Reset</button>
-    </div>
-    <span id="filterResultCount" style="font-size:13px;opacity:0.85;"></span>
-  `;
-
-  grid.parentNode.insertBefore(bar, grid);
-
-  document.getElementById('priceFilterSelect')?.addEventListener('change', (e) => {
-    selectedPriceFilter = e.target.value;
-    applyFiltersAndRender();
-  });
-
-  document.getElementById('sortSelect')?.addEventListener('change', (e) => {
-    selectedSort = e.target.value;
-    applyFiltersAndRender();
-  });
-
-  document.getElementById('resetFilterBtn')?.addEventListener('click', () => {
-    selectedCategory = 'All';
-    selectedPriceFilter = 'ALL';
-    selectedSort = 'default';
-
-    document.querySelectorAll('.cat-btn').forEach((b, idx) => {
-      const cat = b.dataset.category || b.textContent.trim();
-      b.classList.toggle('active', cat === 'All' || (idx === 0 && !b.dataset.category));
-    });
-
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) searchInput.value = '';
-
-    const priceSel = document.getElementById('priceFilterSelect');
-    const sortSel = document.getElementById('sortSelect');
-    if (priceSel) priceSel.value = 'ALL';
-    if (sortSel) sortSel.value = 'default';
-
-    fetchProducts();
-  });
-}
-
 function getFilteredProducts() {
   let list = [...products];
 
@@ -250,7 +178,6 @@ function renderProducts(list) {
 }
 
 async function fetchProducts() {
-  ensureProductFilterBar();
   const grid = document.getElementById('productGrid');
   if (grid && !products.length) {
     grid.innerHTML = '<p class="empty-state">Loading kinbo drops...</p>';
@@ -278,91 +205,18 @@ async function fetchProducts() {
   }
 }
 
-function getAdminContainer() {
-  return (
-    document.getElementById('adminSection') ||
-    document.getElementById('adminPanel') ||
-    document.getElementById('adminDashboard') ||
-    document.querySelector('[data-admin-panel], .admin-panel, .admin-section')
-  );
-}
-
-function getStorefrontContainers() {
-  const explicit =
-    document.getElementById('storefrontSection') ||
-    document.getElementById('mainStorefront') ||
-    document.getElementById('storefront');
-  if (explicit) return [explicit];
-
-  const adminEl = getAdminContainer();
-  return Array.from(document.querySelectorAll('main, section')).filter((el) => {
-    if (!el || el === adminEl) return false;
-    if (adminEl && (el.contains(adminEl) || adminEl.contains(el))) return false;
-    const cls = (el.className || '').toString().toLowerCase();
-    const id = (el.id || '').toLowerCase();
-    if (cls.includes('modal') || id.includes('modal') || id.includes('drawer')) return false;
-    return true;
-  });
-}
-
-function ensureBackToStoreButton(adminEl) {
-  if (!adminEl || document.getElementById('backToStoreBtn')) return;
-
-  const btn = document.createElement('button');
-  btn.id = 'backToStoreBtn';
-  btn.type = 'button';
-  btn.textContent = '← Back to Main Store';
-  btn.style.cssText =
-    'padding:10px 16px;border-radius:10px;border:1px solid #374151;background:#111827;color:#ffffff;font-weight:600;cursor:pointer;margin:0 0 16px 0;display:inline-flex;align-items:center;gap:6px;';
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    openMainStorefront();
-  });
-
-  adminEl.prepend(btn);
-}
-
 function openMainStorefront() {
-  const adminEl = getAdminContainer();
-  if (adminEl) {
-    adminEl.classList.add('hidden');
-    adminEl.style.display = 'none';
-  }
-
-  getStorefrontContainers().forEach((el) => {
-    el.classList.remove('hidden');
-    el.style.display = '';
-  });
-
+  document.getElementById('adminSection')?.classList.add('hidden');
+  document.getElementById('storefrontSection')?.classList.remove('hidden');
   fetchProducts();
   window.scrollTo({ top: 0, behavior: 'smooth' });
   showToast('Returned to Kinbo Storefront');
 }
 
 function openAdminPanel() {
-  const adminEl = getAdminContainer();
-  if (!adminEl) {
-    showToast('Admin section not found');
-    return;
-  }
-
-  // Close login modal if open
-  ['adminLoginModal', 'adminModal'].forEach((id) => {
-    const m = document.getElementById(id);
-    if (m) {
-      m.classList.add('hidden');
-      m.style.display = 'none';
-    }
-  });
-
-  getStorefrontContainers().forEach((el) => {
-    el.classList.add('hidden');
-    el.style.display = 'none';
-  });
-
-  adminEl.classList.remove('hidden');
-  adminEl.style.display = 'block';
-  ensureBackToStoreButton(adminEl);
+  document.getElementById('adminLoginModal')?.classList.add('hidden');
+  document.getElementById('storefrontSection')?.classList.add('hidden');
+  document.getElementById('adminSection')?.classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   loadAdminData();
 }
@@ -372,13 +226,11 @@ function toggleCartDrawer(forceOpen) {
   const backdrop = document.getElementById('drawerBackdrop');
   if (!drawer || !backdrop) return;
 
-  const isClosed = drawer.classList.contains('hidden') || getComputedStyle(drawer).display === 'none';
+  const isClosed = drawer.classList.contains('hidden');
   const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isClosed;
 
   drawer.classList.toggle('hidden', !shouldOpen);
-  drawer.style.display = shouldOpen ? 'block' : 'none';
   backdrop.classList.toggle('hidden', !shouldOpen);
-  backdrop.style.display = shouldOpen ? 'block' : 'none';
 }
 
 async function handleCheckout(e) {
@@ -427,7 +279,6 @@ async function trackOrderByCode(codeOverride) {
   if (!code || !resultBox) return;
 
   resultBox.classList.remove('hidden');
-  resultBox.style.display = 'block';
   resultBox.innerHTML = 'Checking order status...';
 
   try {
@@ -446,14 +297,25 @@ async function trackOrderByCode(codeOverride) {
   }
 }
 
-async function handleCustomerAuth(e, mode = 'login') {
+function setAuthMode(mode) {
+  authMode = mode;
+  const isRegister = mode === 'register';
+  document.getElementById('authModalTitle').textContent = isRegister ? 'Create Account' : 'Account Login';
+  document.getElementById('authName')?.classList.toggle('hidden', !isRegister);
+  document.getElementById('authSubmitBtn').textContent = isRegister ? 'Register' : 'Sign In';
+  document.getElementById('toggleAuthModeBtn').textContent = isRegister
+    ? 'Already have an account? Sign In'
+    : 'Need an account? Register';
+}
+
+async function handleCustomerAuth(e) {
   e.preventDefault();
-  const endpoint = mode === 'register' ? '/auth/register' : '/auth/login';
+  const endpoint = authMode === 'register' ? '/auth/register' : '/auth/login';
   const name = document.getElementById('authName')?.value.trim() || '';
   const email = document.getElementById('authEmail')?.value.trim() || '';
   const password = document.getElementById('authPassword')?.value || '';
 
-  const payload = mode === 'register' ? { name, email, password } : { email, password };
+  const payload = authMode === 'register' ? { name, email, password } : { email, password };
 
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -471,11 +333,7 @@ async function handleCustomerAuth(e, mode = 'login') {
 
     const accBtn = document.getElementById('accountBtn');
     if (accBtn) accBtn.textContent = customerUser.name;
-    const modal = document.getElementById('authModal');
-    if (modal) {
-      modal.classList.add('hidden');
-      modal.style.display = 'none';
-    }
+    document.getElementById('authModal')?.classList.add('hidden');
     showToast(`Welcome, ${customerUser.name}`);
   } catch (err) {
     showToast(err.message);
@@ -520,12 +378,10 @@ async function loadAdminData() {
     if (prodRes.status === 401 || ordRes.status === 401) {
       adminToken = null;
       localStorage.removeItem('kinbo_admin_token');
-      showToast('Admin session expired. Please log in again.');
-      const modal = document.getElementById('adminLoginModal') || document.getElementById('adminModal');
-      if (modal) {
-        modal.classList.remove('hidden');
-        modal.style.display = 'flex';
-      }
+      showToast('Admin session expired. Please sign in again.');
+      document.getElementById('adminSection')?.classList.add('hidden');
+      document.getElementById('storefrontSection')?.classList.remove('hidden');
+      document.getElementById('adminLoginModal')?.classList.remove('hidden');
       return;
     }
 
@@ -576,7 +432,9 @@ async function loadAdminData() {
           .join('');
       }
     }
-  } catch (_) {}
+  } catch (err) {
+    showToast('Could not load admin data');
+  }
 }
 
 async function handleAddProduct(e) {
@@ -651,9 +509,35 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.cat-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      selectedCategory = btn.dataset.category || btn.textContent.trim() || 'All';
+      selectedCategory = btn.dataset.category || 'All';
       fetchProducts();
     });
+  });
+
+  document.getElementById('priceFilterSelect')?.addEventListener('change', (e) => {
+    selectedPriceFilter = e.target.value;
+    applyFiltersAndRender();
+  });
+
+  document.getElementById('sortSelect')?.addEventListener('change', (e) => {
+    selectedSort = e.target.value;
+    applyFiltersAndRender();
+  });
+
+  document.getElementById('resetFilterBtn')?.addEventListener('click', () => {
+    selectedCategory = 'All';
+    selectedPriceFilter = 'ALL';
+    selectedSort = 'default';
+    document.querySelectorAll('.cat-btn').forEach((b) => {
+      b.classList.toggle('active', (b.dataset.category || 'All') === 'All');
+    });
+    const searchEl = document.getElementById('searchInput');
+    if (searchEl) searchEl.value = '';
+    const priceEl = document.getElementById('priceFilterSelect');
+    const sortEl = document.getElementById('sortSelect');
+    if (priceEl) priceEl.value = 'ALL';
+    if (sortEl) sortEl.value = 'default';
+    fetchProducts();
   });
 
   document.getElementById('searchInput')?.addEventListener('input', () => {
@@ -672,43 +556,27 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast(`Signed in as ${customerUser.name}`);
       return;
     }
-    const modal = document.getElementById('authModal');
-    if (modal) {
-      modal.classList.remove('hidden');
-      modal.style.display = 'flex';
-    }
+    setAuthMode('login');
+    document.getElementById('authModal')?.classList.remove('hidden');
   });
   document.getElementById('closeAuthModal')?.addEventListener('click', () => {
-    const modal = document.getElementById('authModal');
-    if (modal) {
-      modal.classList.add('hidden');
-      modal.style.display = 'none';
-    }
+    document.getElementById('authModal')?.classList.add('hidden');
   });
-  document.getElementById('authForm')?.addEventListener('submit', (e) => handleCustomerAuth(e, 'login'));
+  document.getElementById('toggleAuthModeBtn')?.addEventListener('click', () => {
+    setAuthMode(authMode === 'login' ? 'register' : 'login');
+  });
+  document.getElementById('authForm')?.addEventListener('submit', handleCustomerAuth);
 
   document.getElementById('adminOpenBtn')?.addEventListener('click', () => {
     if (adminToken) {
       openAdminPanel();
     } else {
-      const modal = document.getElementById('adminLoginModal') || document.getElementById('adminModal');
-      if (modal) {
-        modal.classList.remove('hidden');
-        modal.style.display = 'flex';
-      } else {
-        openAdminPanel();
-      }
+      document.getElementById('adminLoginModal')?.classList.remove('hidden');
     }
   });
-
   document.getElementById('closeAdminModal')?.addEventListener('click', () => {
-    const modal = document.getElementById('adminLoginModal') || document.getElementById('adminModal');
-    if (modal) {
-      modal.classList.add('hidden');
-      modal.style.display = 'none';
-    }
+    document.getElementById('adminLoginModal')?.classList.add('hidden');
   });
-
   document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
   document.getElementById('addProductForm')?.addEventListener('submit', handleAddProduct);
   document.getElementById('backToStoreBtn')?.addEventListener('click', openMainStorefront);
