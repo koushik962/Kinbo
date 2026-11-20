@@ -228,7 +228,8 @@ function renderProducts(list) {
 
   grid.innerHTML = list
     .map((p, idx) => {
-      const featuredClass = idx === 0 && selectedSort === 'default' && selectedPriceFilter === 'ALL' ? 'bento-featured' : '';
+      const featuredClass =
+        idx === 0 && selectedSort === 'default' && selectedPriceFilter === 'ALL' ? 'bento-featured' : '';
       return `
         <article class="product-card ${featuredClass}">
           <div class="product-img-wrap">
@@ -484,7 +485,10 @@ async function handleAdminLogin(e) {
 
     adminToken = data.token;
     localStorage.setItem('kinbo_admin_token', adminToken);
-    const modal = document.getElementById('adminLoginModal');
+    const modal =
+      document.getElementById('adminLoginModal') ||
+      document.getElementById('adminModal') ||
+      document.querySelector('[data-admin-modal]');
     if (modal) {
       modal.classList.add('hidden');
       modal.style.display = 'none';
@@ -510,7 +514,15 @@ async function loadAdminData() {
       adminToken = null;
       localStorage.removeItem('kinbo_admin_token');
       showToast('Session expired. Please log in as admin again.');
-      document.getElementById('adminLoginModal')?.classList.remove('hidden');
+      const modal =
+        document.getElementById('adminLoginModal') ||
+        document.getElementById('adminModal') ||
+        document.querySelector('[data-admin-modal]');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+        modal.style.zIndex = '9999';
+      }
       return;
     }
 
@@ -636,6 +648,38 @@ async function updateOrderStatus(orderId, status) {
   } catch (_) {}
 }
 
+function findAdminTrigger() {
+  return (
+    document.getElementById('adminOpenBtn') ||
+    document.getElementById('adminBtn') ||
+    document.getElementById('openAdminBtn') ||
+    document.querySelector('[data-admin-btn], [data-open-admin], [href="#admin"]') ||
+    Array.from(document.querySelectorAll('button, a')).find((el) =>
+      /\badmin\b/i.test((el.textContent || '').trim())
+    )
+  );
+}
+
+function showAdminLoginOrPanel() {
+  if (adminToken) {
+    openAdminPanel();
+    return;
+  }
+
+  const modal =
+    document.getElementById('adminLoginModal') ||
+    document.getElementById('adminModal') ||
+    document.querySelector('[data-admin-modal]');
+
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    modal.style.zIndex = '9999';
+  } else {
+    openAdminPanel();
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.cat-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -651,13 +695,26 @@ document.addEventListener('DOMContentLoaded', () => {
     window._searchTimer = setTimeout(fetchProducts, 250);
   });
 
-  document.getElementById('cartBtn')?.addEventListener('click', () => toggleCartDrawer(true));
+  const cartTrigger =
+    document.getElementById('cartBtn') ||
+    document.getElementById('openCartBtn') ||
+    document.querySelector('[data-cart-btn]');
+  cartTrigger?.addEventListener('click', (e) => {
+    e.preventDefault();
+    toggleCartDrawer(true);
+  });
+
   document.getElementById('closeCartBtn')?.addEventListener('click', () => toggleCartDrawer(false));
   document.getElementById('drawerBackdrop')?.addEventListener('click', () => toggleCartDrawer(false));
   document.getElementById('checkoutForm')?.addEventListener('submit', handleCheckout);
   document.getElementById('trackBtn')?.addEventListener('click', () => trackOrderByCode());
 
-  document.getElementById('accountBtn')?.addEventListener('click', () => {
+  const accTrigger =
+    document.getElementById('accountBtn') ||
+    document.getElementById('loginBtn') ||
+    document.querySelector('[data-account-btn]');
+  accTrigger?.addEventListener('click', (e) => {
+    e.preventDefault();
     if (customerUser) {
       showToast(`Signed in as ${customerUser.name}`);
       return;
@@ -666,8 +723,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modal) {
       modal.classList.remove('hidden');
       modal.style.display = 'flex';
+      modal.style.zIndex = '9999';
     }
   });
+
   document.getElementById('closeAuthModal')?.addEventListener('click', () => {
     const modal = document.getElementById('authModal');
     if (modal) {
@@ -677,36 +736,51 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('authForm')?.addEventListener('submit', (e) => handleCustomerAuth(e, 'login'));
 
-  document.getElementById('adminOpenBtn')?.addEventListener('click', () => {
-    if (adminToken) {
-      openAdminPanel();
-    } else {
-      const modal = document.getElementById('adminLoginModal');
-      if (modal) {
-        modal.classList.remove('hidden');
-        modal.style.display = 'flex';
-      } else {
-        openAdminPanel();
-      }
+  const adminTrigger = findAdminTrigger();
+  if (adminTrigger) {
+    adminTrigger.style.cursor = 'pointer';
+    adminTrigger.style.position = 'relative';
+    adminTrigger.style.zIndex = '50';
+    adminTrigger.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showAdminLoginOrPanel();
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    const target = e.target.closest('#adminOpenBtn, #adminBtn, #openAdminBtn, [data-admin-btn]');
+    if (target) {
+      e.preventDefault();
+      showAdminLoginOrPanel();
     }
   });
+
   document.getElementById('closeAdminModal')?.addEventListener('click', () => {
-    const modal = document.getElementById('adminLoginModal');
+    const modal =
+      document.getElementById('adminLoginModal') ||
+      document.getElementById('adminModal') ||
+      document.querySelector('[data-admin-modal]');
     if (modal) {
       modal.classList.add('hidden');
       modal.style.display = 'none';
     }
   });
-  document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
+
+  const adminForm =
+    document.getElementById('adminLoginForm') ||
+    document.querySelector('#adminLoginModal form, #adminModal form');
+  adminForm?.addEventListener('submit', handleAdminLogin);
+
   document.getElementById('addProductForm')?.addEventListener('submit', handleAddProduct);
   document.getElementById('backToStoreBtn')?.addEventListener('click', openMainStorefront);
   document.getElementById('brandHomeBtn')?.addEventListener('click', openMainStorefront);
 
-  if (customerUser && document.getElementById('accountBtn')) {
-    document.getElementById('accountBtn').textContent = customerUser.name;
+  if (customerUser) {
+    const accBtn = document.getElementById('accountBtn');
+    if (accBtn) accBtn.textContent = customerUser.name;
   }
 
   updateCartUI();
   fetchProducts();
 });
-
