@@ -1,4 +1,4 @@
-const API_BASE = 'http://127.0.0.1:5000/api';
+const API_BASE = 'https://kinbo-api-0wdb.onrender.com/api';
 
 let products = [];
 let selectedCategory = 'All';
