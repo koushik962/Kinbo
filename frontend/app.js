@@ -1,99 +1,33 @@
 const API_BASE = 'https://kinbo-api-0wdb.onrender.com/api';
 
-let products = [];
+let allProducts = [];
+let filteredProducts = [];
 let selectedCategory = 'All';
+let selectedPriceFilter = 'ALL';
+let selectedSort = 'default';
+
 let cart = JSON.parse(localStorage.getItem('kinbo_cart') || '[]');
 let customerToken = localStorage.getItem('kinbo_user_token') || null;
 let customerUser = JSON.parse(localStorage.getItem('kinbo_user_info') || 'null');
 let adminToken = localStorage.getItem('kinbo_admin_token') || null;
 
 function showToast(msg) {
-  const el = document.getElementById('toast');
-  if (!el) return;
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.style.cssText =
+      'position:fixed;bottom:20px;right:20px;background:#111827;color:#fff;padding:10px 16px;border-radius:10px;z-index:9999;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.22);';
+    document.body.appendChild(el);
+  }
   el.textContent = msg;
   el.classList.remove('hidden');
+  el.style.display = 'block';
   clearTimeout(window._toastTimer);
   window._toastTimer = setTimeout(() => {
     el.classList.add('hidden');
+    el.style.display = 'none';
   }, 2600);
-}
-
-function saveCart() {
-  localStorage.setItem('kinbo_cart', JSON.stringify(cart));
-  updateCartUI();
-}
-
-function updateCartUI() {
-  const countEl = document.getElementById('cartCount');
-  const totalCount = cart.reduce((sum, item) => sum + item.qty, 0);
-  if (countEl) countEl.textContent = totalCount;
-
-  const listEl = document.getElementById('cartItems');
-  const subtotalEl = document.getElementById('cartSubtotal');
-  if (!listEl || !subtotalEl) return;
-
-  if (!cart.length) {
-    listEl.innerHTML = '<p class="empty-state">Your bag is empty. Add a youth drop to get started.</p>';
-    subtotalEl.textContent = '৳0';
-    return;
-  }
-
-  let subtotal = 0;
-  listEl.innerHTML = cart
-    .map((item) => {
-      const lineTotal = item.price * item.qty;
-      subtotal += lineTotal;
-      return `
-        <div class="cart-item">
-          <div>
-            <strong>${escapeHtml(item.title)}</strong>
-            <div class="muted">৳${item.price.toLocaleString()} × ${item.qty}</div>
-          </div>
-          <div class="cart-actions">
-            <button type="button" onclick="changeQty(${item.id}, -1)">-</button>
-            <button type="button" onclick="changeQty(${item.id}, 1)">+</button>
-            <button type="button" onclick="removeFromCart(${item.id})">✕</button>
-          </div>
-        </div>
-      `;
-    })
-    .join('');
-
-  subtotalEl.textContent = `৳${subtotal.toLocaleString()}`;
-}
-
-function addToCart(productId) {
-  const prod = products.find((p) => p.id === productId);
-  if (!prod) return;
-
-  const existing = cart.find((item) => item.id === productId);
-  if (existing) {
-    existing.qty += 1;
-  } else {
-    cart.push({
-      id: prod.id,
-      title: prod.title,
-      price: prod.price,
-      qty: 1,
-    });
-  }
-  saveCart();
-  showToast(`${prod.title} added to bag`);
-}
-
-function changeQty(productId, delta) {
-  const item = cart.find((i) => i.id === productId);
-  if (!item) return;
-  item.qty += delta;
-  if (item.qty <= 0) {
-    cart = cart.filter((i) => i.id !== productId);
-  }
-  saveCart();
-}
-
-function removeFromCart(productId) {
-  cart = cart.filter((i) => i.id !== productId);
-  saveCart();
 }
 
 function escapeHtml(str = '') {
@@ -104,8 +38,187 @@ function escapeHtml(str = '') {
     .replace(/"/g, '&quot;');
 }
 
+function saveCart() {
+  localStorage.setItem('kinbo_cart', JSON.stringify(cart));
+  updateCartUI();
+}
+
+function updateCartUI() {
+  const countEl =
+    document.getElementById('cartCount') ||
+    document.querySelector('[data-cart-count]') ||
+    document.querySelector('.cart-count');
+  const totalCount = cart.reduce((sum, item) => sum + Number(item.qty || 1), 0);
+  if (countEl) countEl.textContent = totalCount;
+
+  const listEl =
+    document.getElementById('cartItems') ||
+    document.getElementById('cartList') ||
+    document.querySelector('.cart-items');
+  const subtotalEl =
+    document.getElementById('cartSubtotal') ||
+    document.getElementById('cartTotal') ||
+    document.querySelector('.cart-subtotal');
+
+  if (!listEl) return;
+
+  if (!cart.length) {
+    listEl.innerHTML = '<p class="empty-state">Your bag is empty. Add a youth drop to get started.</p>';
+    if (subtotalEl) subtotalEl.textContent = '৳0';
+    return;
+  }
+
+  let subtotal = 0;
+  listEl.innerHTML = cart
+    .map((item) => {
+      const price = Number(item.price || 0);
+      const qty = Number(item.qty || 1);
+      subtotal += price * qty;
+      return `
+        <div class="cart-item" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e5e7eb;">
+          <div>
+            <strong>${escapeHtml(item.title)}</strong>
+            <div style="font-size:13px;opacity:0.75;">৳${price.toLocaleString()} × ${qty}</div>
+          </div>
+          <div class="cart-actions" style="display:flex;gap:6px;">
+            <button type="button" onclick="changeQty(${item.id}, -1)">-</button>
+            <button type="button" onclick="changeQty(${item.id}, 1)">+</button>
+            <button type="button" onclick="removeFromCart(${item.id})">✕</button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  if (subtotalEl) subtotalEl.textContent = `৳${subtotal.toLocaleString()}`;
+}
+
+function addToCart(productId) {
+  const prod = allProducts.find((p) => Number(p.id) === Number(productId));
+  if (!prod) {
+    showToast('Product not found');
+    return;
+  }
+
+  const existing = cart.find((item) => Number(item.id) === Number(productId));
+  if (existing) {
+    existing.qty += 1;
+  } else {
+    cart.push({
+      id: prod.id,
+      title: prod.title,
+      price: Number(prod.price),
+      qty: 1,
+    });
+  }
+  saveCart();
+  showToast(`${prod.title} added to bag`);
+}
+
+function changeQty(productId, delta) {
+  const item = cart.find((i) => Number(i.id) === Number(productId));
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) {
+    cart = cart.filter((i) => Number(i.id) !== Number(productId));
+  }
+  saveCart();
+}
+
+function removeFromCart(productId) {
+  cart = cart.filter((i) => Number(i.id) !== Number(productId));
+  saveCart();
+}
+
+function ensureFilterControls() {
+  const grid = document.getElementById('productGrid') || document.querySelector('.product-grid');
+  if (!grid || document.getElementById('kinboFilterBar')) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'kinboFilterBar';
+  bar.style.cssText =
+    'display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:14px 0 18px;padding:12px 14px;border-radius:12px;background:#f9fafb;border:1px solid #e5e7eb;color:#111827;';
+
+  bar.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <strong style="font-size:13px;">Filter:</strong>
+      <select id="priceFilterSelect" style="padding:7px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#111827;">
+        <option value="ALL">All Prices</option>
+        <option value="UNDER_1500">Under ৳1,500</option>
+        <option value="1500_2500">৳1,500 – ৳2,500</option>
+        <option value="ABOVE_2500">Above ৳2,500</option>
+      </select>
+      <select id="sortSelect" style="padding:7px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#111827;">
+        <option value="default">Sort: Featured</option>
+        <option value="price_asc">Price: Low to High</option>
+        <option value="price_desc">Price: High to Low</option>
+        <option value="name_asc">Name: A to Z</option>
+      </select>
+      <button type="button" id="resetFiltersBtn" style="padding:7px 12px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#111827;cursor:pointer;font-size:13px;">
+        Reset
+      </button>
+    </div>
+    <div id="productCountLabel" style="font-size:13px;font-weight:600;color:#374151;"></div>
+  `;
+
+  grid.parentNode.insertBefore(bar, grid);
+
+  document.getElementById('priceFilterSelect')?.addEventListener('change', (e) => {
+    selectedPriceFilter = e.target.value;
+    applyClientFiltersAndRender();
+  });
+
+  document.getElementById('sortSelect')?.addEventListener('change', (e) => {
+    selectedSort = e.target.value;
+    applyClientFiltersAndRender();
+  });
+
+  document.getElementById('resetFiltersBtn')?.addEventListener('click', () => {
+    selectedCategory = 'All';
+    selectedPriceFilter = 'ALL';
+    selectedSort = 'default';
+    document.querySelectorAll('.cat-btn').forEach((btn, i) => {
+      btn.classList.toggle('active', i === 0 || btn.dataset.category === 'All');
+    });
+    const searchEl = document.getElementById('searchInput');
+    if (searchEl) searchEl.value = '';
+    const priceEl = document.getElementById('priceFilterSelect');
+    const sortEl = document.getElementById('sortSelect');
+    if (priceEl) priceEl.value = 'ALL';
+    if (sortEl) sortEl.value = 'default';
+    fetchProducts();
+  });
+}
+
+function applyClientFiltersAndRender() {
+  let list = [...allProducts];
+
+  if (selectedPriceFilter === 'UNDER_1500') {
+    list = list.filter((p) => Number(p.price) < 1500);
+  } else if (selectedPriceFilter === '1500_2500') {
+    list = list.filter((p) => Number(p.price) >= 1500 && Number(p.price) <= 2500);
+  } else if (selectedPriceFilter === 'ABOVE_2500') {
+    list = list.filter((p) => Number(p.price) > 2500);
+  }
+
+  if (selectedSort === 'price_asc') {
+    list.sort((a, b) => Number(a.price) - Number(b.price));
+  } else if (selectedSort === 'price_desc') {
+    list.sort((a, b) => Number(b.price) - Number(a.price));
+  } else if (selectedSort === 'name_asc') {
+    list.sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  }
+
+  filteredProducts = list;
+  const countLabel = document.getElementById('productCountLabel');
+  if (countLabel) {
+    countLabel.textContent = `${filteredProducts.length} of ${allProducts.length} items shown`;
+  }
+  renderProducts(filteredProducts);
+}
+
 function renderProducts(list) {
-  const grid = document.getElementById('productGrid');
+  const grid = document.getElementById('productGrid') || document.querySelector('.product-grid');
   if (!grid) return;
 
   if (!list.length) {
@@ -115,7 +228,7 @@ function renderProducts(list) {
 
   grid.innerHTML = list
     .map((p, idx) => {
-      const featuredClass = idx === 0 ? 'bento-featured' : '';
+      const featuredClass = idx === 0 && selectedSort === 'default' && selectedPriceFilter === 'ALL' ? 'bento-featured' : '';
       return `
         <article class="product-card ${featuredClass}">
           <div class="product-img-wrap">
@@ -138,8 +251,9 @@ function renderProducts(list) {
 }
 
 async function fetchProducts() {
-  const grid = document.getElementById('productGrid');
-  if (grid) {
+  ensureFilterControls();
+  const grid = document.getElementById('productGrid') || document.querySelector('.product-grid');
+  if (grid && !allProducts.length) {
     grid.innerHTML = '<p class="empty-state">Loading kinbo drops...</p>';
   }
 
@@ -156,8 +270,8 @@ async function fetchProducts() {
     const queryStr = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`${API_BASE}/products${queryStr}`);
     if (!res.ok) throw new Error('Failed to load products');
-    products = await res.json();
-    renderProducts(products);
+    allProducts = await res.json();
+    applyClientFiltersAndRender();
   } catch (err) {
     if (grid) {
       grid.innerHTML = '<p class="empty-state">Could not connect to backend API. Please try again in a moment.</p>';
@@ -165,33 +279,42 @@ async function fetchProducts() {
   }
 }
 
-function getMainStorefrontElement() {
-  return (
-    document.getElementById('storefrontSection') ||
-    document.getElementById('mainStorefront') ||
-    document.getElementById('storefront') ||
-    document.querySelector('main')
-  );
-}
-
 function getAdminSectionElement() {
   return (
     document.getElementById('adminSection') ||
     document.getElementById('adminPanel') ||
-    document.getElementById('adminView')
+    document.getElementById('adminView') ||
+    document.querySelector('[data-admin-panel]')
   );
+}
+
+function getStorefrontElements() {
+  const explicit =
+    document.getElementById('storefrontSection') ||
+    document.getElementById('mainStorefront') ||
+    document.getElementById('storefront');
+  if (explicit) return [explicit];
+
+  const adminSec = getAdminSectionElement();
+  const mains = Array.from(document.querySelectorAll('main, section'));
+  return mains.filter((el) => el !== adminSec && !el.contains(adminSec));
 }
 
 function openMainStorefront() {
   const adminSec = getAdminSectionElement();
-  const storeSec = getMainStorefrontElement();
+  if (adminSec) {
+    adminSec.classList.add('hidden');
+    adminSec.style.display = 'none';
+  }
 
-  if (adminSec) adminSec.classList.add('hidden');
-  if (storeSec) storeSec.classList.remove('hidden');
+  getStorefrontElements().forEach((el) => {
+    el.classList.remove('hidden');
+    el.style.display = '';
+  });
 
   fetchProducts();
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  showToast('Back to kinbo storefront');
+  showToast('Returned to Kinbo Storefront');
 }
 
 function ensureBackToStoreButton(adminSec) {
@@ -202,7 +325,7 @@ function ensureBackToStoreButton(adminSec) {
   btn.type = 'button';
   btn.textContent = '← Back to Main Store';
   btn.style.cssText =
-    'padding:10px 16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#ffffff;font-weight:600;cursor:pointer;margin-bottom:14px;display:inline-flex;align-items:center;gap:6px;';
+    'padding:10px 16px;border-radius:10px;border:1px solid #374151;background:#111827;color:#ffffff;font-weight:600;cursor:pointer;margin:0 0 16px 0;display:inline-flex;align-items:center;gap:6px;';
   btn.addEventListener('click', openMainStorefront);
 
   adminSec.prepend(btn);
@@ -210,24 +333,36 @@ function ensureBackToStoreButton(adminSec) {
 
 function openAdminPanel() {
   const adminSec = getAdminSectionElement();
-  const storeSec = getMainStorefrontElement();
-
-  if (storeSec) storeSec.classList.add('hidden');
-  if (adminSec) {
-    adminSec.classList.remove('hidden');
-    ensureBackToStoreButton(adminSec);
+  if (!adminSec) {
+    showToast('Admin panel container not found');
+    return;
   }
+
+  getStorefrontElements().forEach((el) => {
+    el.classList.add('hidden');
+    el.style.display = 'none';
+  });
+
+  adminSec.classList.remove('hidden');
+  adminSec.style.display = 'block';
+  ensureBackToStoreButton(adminSec);
   loadAdminData();
 }
 
 function toggleCartDrawer(forceOpen) {
-  const drawer = document.getElementById('cartDrawer');
-  const backdrop = document.getElementById('drawerBackdrop');
-  if (!drawer || !backdrop) return;
+  const drawer = document.getElementById('cartDrawer') || document.querySelector('.cart-drawer');
+  const backdrop = document.getElementById('drawerBackdrop') || document.querySelector('.drawer-backdrop');
+  if (!drawer) return;
 
-  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : drawer.classList.contains('hidden');
+  const isCurrentlyHidden = drawer.classList.contains('hidden') || getComputedStyle(drawer).display === 'none';
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isCurrentlyHidden;
+
   drawer.classList.toggle('hidden', !shouldOpen);
-  backdrop.classList.toggle('hidden', !shouldOpen);
+  drawer.style.display = shouldOpen ? 'block' : 'none';
+  if (backdrop) {
+    backdrop.classList.toggle('hidden', !shouldOpen);
+    backdrop.style.display = shouldOpen ? 'block' : 'none';
+  }
 }
 
 async function handleCheckout(e) {
@@ -276,6 +411,7 @@ async function trackOrderByCode(codeOverride) {
   if (!code || !resultBox) return;
 
   resultBox.classList.remove('hidden');
+  resultBox.style.display = 'block';
   resultBox.innerHTML = 'Checking order status...';
 
   try {
@@ -319,7 +455,11 @@ async function handleCustomerAuth(e, mode = 'login') {
 
     const accBtn = document.getElementById('accountBtn');
     if (accBtn) accBtn.textContent = customerUser.name;
-    document.getElementById('authModal')?.classList.add('hidden');
+    const modal = document.getElementById('authModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
     showToast(`Welcome, ${customerUser.name}`);
   } catch (err) {
     showToast(err.message);
@@ -344,7 +484,11 @@ async function handleAdminLogin(e) {
 
     adminToken = data.token;
     localStorage.setItem('kinbo_admin_token', adminToken);
-    document.getElementById('adminLoginModal')?.classList.add('hidden');
+    const modal = document.getElementById('adminLoginModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
     openAdminPanel();
     showToast('Admin panel unlocked');
   } catch (err) {
@@ -361,6 +505,14 @@ async function loadAdminData() {
       fetch(`${API_BASE}/admin/products`, { headers }),
       fetch(`${API_BASE}/admin/orders`, { headers }),
     ]);
+
+    if (prodRes.status === 401 || ordRes.status === 401) {
+      adminToken = null;
+      localStorage.removeItem('kinbo_admin_token');
+      showToast('Session expired. Please log in as admin again.');
+      document.getElementById('adminLoginModal')?.classList.remove('hidden');
+      return;
+    }
 
     if (prodRes.ok) {
       const adminProds = await prodRes.json();
@@ -409,12 +561,17 @@ async function loadAdminData() {
           .join('');
       }
     }
-  } catch (_) {}
+  } catch (err) {
+    showToast('Could not load admin data');
+  }
 }
 
 async function handleAddProduct(e) {
   e.preventDefault();
-  if (!adminToken) return;
+  if (!adminToken) {
+    showToast('Please login as admin first');
+    return;
+  }
 
   const payload = {
     title: document.getElementById('newProdTitle')?.value.trim() || '',
@@ -484,7 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.cat-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      selectedCategory = btn.dataset.category || 'All';
+      selectedCategory = btn.dataset.category || btn.textContent.trim() || 'All';
       fetchProducts();
     });
   });
@@ -505,10 +662,18 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast(`Signed in as ${customerUser.name}`);
       return;
     }
-    document.getElementById('authModal')?.classList.remove('hidden');
+    const modal = document.getElementById('authModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+    }
   });
   document.getElementById('closeAuthModal')?.addEventListener('click', () => {
-    document.getElementById('authModal')?.classList.add('hidden');
+    const modal = document.getElementById('authModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
   });
   document.getElementById('authForm')?.addEventListener('submit', (e) => handleCustomerAuth(e, 'login'));
 
@@ -516,11 +681,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (adminToken) {
       openAdminPanel();
     } else {
-      document.getElementById('adminLoginModal')?.classList.remove('hidden');
+      const modal = document.getElementById('adminLoginModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+      } else {
+        openAdminPanel();
+      }
     }
   });
   document.getElementById('closeAdminModal')?.addEventListener('click', () => {
-    document.getElementById('adminLoginModal')?.classList.add('hidden');
+    const modal = document.getElementById('adminLoginModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
   });
   document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
   document.getElementById('addProductForm')?.addEventListener('submit', handleAddProduct);
