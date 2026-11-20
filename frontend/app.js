@@ -9,75 +9,13 @@ let adminToken = localStorage.getItem('kinbo_admin_token') || null;
 
 function showToast(msg) {
   const el = document.getElementById('toast');
+  if (!el) return;
   el.textContent = msg;
   el.classList.remove('hidden');
   clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(() => el.classList.add('hidden'), 2600);
-}
-
-function switchView(view) {
-  document.getElementById('storeView').classList.toggle('hidden', view !== 'store');
-  document.getElementById('adminView').classList.toggle('hidden', view !== 'admin');
-  if (view === 'admin') {
-    checkAdminState();
-  }
-}
-
-async function fetchProducts() {
-  try {
-    const res = await fetch(`${API_BASE}/products`);
-    products = await res.json();
-    renderCategories();
-    renderProducts();
-  } catch {
-    showToast('Backend server is not running yet (port 5000)');
-  }
-}
-
-function renderCategories() {
-  const cats = ['All', ...new Set(products.map(p => p.category))];
-  const wrap = document.getElementById('categoryPills');
-  wrap.innerHTML = cats.map(c => `
-    <button class="filter-pill ${selectedCategory === c ? 'active' : ''}" onclick="selectCategory('${c}')">${c}</button>
-  `).join('');
-}
-
-function selectCategory(cat) {
-  selectedCategory = cat;
-  renderCategories();
-  renderProducts();
-}
-
-function renderProducts() {
-  const q = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
-  const filtered = products.filter(p => {
-    const matchCat = selectedCategory === 'All' || p.category === selectedCategory;
-    const matchQ = !q || p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
-    return matchCat && matchQ;
-  });
-
-  const grid = document.getElementById('productGrid');
-  if (!filtered.length) {
-    grid.innerHTML = `<p class="muted-text">No matching drops found.</p>`;
-    return;
-  }
-
-  grid.innerHTML = filtered.map(p => `
-    <article class="product-card">
-      <div class="product-img-wrap">
-        <img src="${p.image_url}" alt="${p.name}" loading="lazy" />
-        <span class="product-tag">${p.tag}</span>
-      </div>
-      <div class="product-body">
-        <span class="product-cat">${p.category} • Stock: ${p.stock}</span>
-        <h3 class="product-title">${p.name}</h3>
-        <div class="product-foot">
-          <span class="price">৳${Number(p.price).toLocaleString()}</span>
-          <button class="add-btn" onclick="addToCart(${p.id})">+ Add</button>
-        </div>
-      </div>
-    </article>
-  `).join('');
+  window._toastTimer = setTimeout(() => {
+    el.classList.add('hidden');
+  }, 2600);
 }
 
 function saveCart() {
@@ -85,368 +23,515 @@ function saveCart() {
   updateCartUI();
 }
 
+function updateCartUI() {
+  const countEl = document.getElementById('cartCount');
+  const totalCount = cart.reduce((sum, item) => sum + item.qty, 0);
+  if (countEl) countEl.textContent = totalCount;
+
+  const listEl = document.getElementById('cartItems');
+  const subtotalEl = document.getElementById('cartSubtotal');
+  if (!listEl || !subtotalEl) return;
+
+  if (!cart.length) {
+    listEl.innerHTML = '<p class="empty-state">Your bag is empty. Add a youth drop to get started.</p>';
+    subtotalEl.textContent = '৳0';
+    return;
+  }
+
+  let subtotal = 0;
+  listEl.innerHTML = cart
+    .map((item) => {
+      const lineTotal = item.price * item.qty;
+      subtotal += lineTotal;
+      return `
+        <div class="cart-item">
+          <div>
+            <strong>${escapeHtml(item.title)}</strong>
+            <div class="muted">৳${item.price.toLocaleString()} × ${item.qty}</div>
+          </div>
+          <div class="cart-actions">
+            <button type="button" onclick="changeQty(${item.id}, -1)">-</button>
+            <button type="button" onclick="changeQty(${item.id}, 1)">+</button>
+            <button type="button" onclick="removeFromCart(${item.id})">✕</button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  subtotalEl.textContent = `৳${subtotal.toLocaleString()}`;
+}
+
 function addToCart(productId) {
-  const prod = products.find(p => p.id === productId);
+  const prod = products.find((p) => p.id === productId);
   if (!prod) return;
-  const existing = cart.find(item => item.id === productId);
+
+  const existing = cart.find((item) => item.id === productId);
   if (existing) {
     existing.qty += 1;
   } else {
-    cart.push({ id: prod.id, name: prod.name, price: prod.price, qty: 1 });
+    cart.push({
+      id: prod.id,
+      title: prod.title,
+      price: prod.price,
+      qty: 1,
+    });
   }
   saveCart();
-  showToast(`${prod.name} added to bag`);
+  showToast(`${prod.title} added to bag`);
 }
 
 function changeQty(productId, delta) {
-  const item = cart.find(i => i.id === productId);
+  const item = cart.find((i) => i.id === productId);
   if (!item) return;
   item.qty += delta;
   if (item.qty <= 0) {
-    cart = cart.filter(i => i.id !== productId);
+    cart = cart.filter((i) => i.id !== productId);
   }
   saveCart();
 }
 
-function updateCartUI() {
-  const totalQty = cart.reduce((acc, i) => acc + i.qty, 0);
-  const totalPrice = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
-  document.getElementById('bagCount').textContent = totalQty;
-  document.getElementById('cartTotal').textContent = `৳${totalPrice.toLocaleString()}`;
-  document.getElementById('modalTotal').textContent = `৳${totalPrice.toLocaleString()}`;
+function removeFromCart(productId) {
+  cart = cart.filter((i) => i.id !== productId);
+  saveCart();
+}
 
-  const wrap = document.getElementById('cartItems');
-  if (!cart.length) {
-    wrap.innerHTML = `<p class="muted-text">Your bag is empty. Pick a drop to start.</p>`;
+function escapeHtml(str = '') {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderProducts(list) {
+  const grid = document.getElementById('productGrid');
+  if (!grid) return;
+
+  if (!list.length) {
+    grid.innerHTML = '<p class="empty-state">No products matched your filter.</p>';
     return;
   }
 
-  wrap.innerHTML = cart.map(i => `
-    <div class="cart-item">
-      <div>
-        <strong>${i.name}</strong>
-        <div class="muted-text">৳${(i.price * i.qty).toLocaleString()}</div>
-      </div>
-      <div class="qty-controls">
-        <button onclick="changeQty(${i.id}, -1)">-</button>
-        <span>${i.qty}</span>
-        <button onclick="changeQty(${i.id}, 1)">+</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function toggleCart(open) {
-  document.getElementById('cartBackdrop').classList.toggle('hidden', !open);
-  document.getElementById('cartDrawer').classList.toggle('open', open);
-}
-
-function closeModals() {
-  ['checkoutModal', 'accountModal', 'trackModal'].forEach(id => {
-    document.getElementById(id).classList.add('hidden');
-  });
-}
-
-function openCheckoutModal() {
-  if (!cart.length) {
-    showToast('Add at least one item first');
-    return;
-  }
-  toggleCart(false);
-  document.getElementById('orderSuccessBox').classList.add('hidden');
-  const badge = document.getElementById('checkoutModeBadge');
-  if (customerUser) {
-    badge.innerHTML = `Ordering as <strong>${customerUser.name}</strong> (Account linked)`;
-    document.getElementById('cName').value = customerUser.name || '';
-  } else {
-    badge.innerHTML = `<strong>Guest Mode:</strong> No account needed. Just enter delivery details.`;
-  }
-  document.getElementById('checkoutModal').classList.remove('hidden');
-}
-
-async function submitOrder(e) {
-  e.preventDefault();
-  const totalAmount = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
-  const itemsSummary = cart.map(i => `${i.name} x${i.qty}`).join(', ');
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (customerToken) headers['Authorization'] = `Bearer ${customerToken}`;
-
-  const res = await fetch(`${API_BASE}/orders`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      customer_name: document.getElementById('cName').value,
-      customer_phone: document.getElementById('cPhone').value,
-      shipping_address: document.getElementById('cAddress').value,
-      items_summary: itemsSummary,
-      total_amount: totalAmount
+  grid.innerHTML = list
+    .map((p, idx) => {
+      const featuredClass = idx === 0 ? 'bento-featured' : '';
+      return `
+        <article class="product-card ${featuredClass}">
+          <div class="product-img-wrap">
+            ${p.badge ? `<span class="badge">${escapeHtml(p.badge)}</span>` : ''}
+            <img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.title)}" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <span class="product-cat">${escapeHtml(p.category)}</span>
+            <h3>${escapeHtml(p.title)}</h3>
+            <p class="product-desc">${escapeHtml(p.description)}</p>
+            <div class="product-foot">
+              <span class="price">৳${Number(p.price).toLocaleString()}</span>
+              <button type="button" class="btn-primary" onclick="addToCart(${p.id})">Add to Bag</button>
+            </div>
+          </div>
+        </article>
+      `;
     })
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    showToast(data.error || 'Order failed');
-    return;
-  }
-
-  cart = [];
-  saveCart();
-  const box = document.getElementById('orderSuccessBox');
-  box.classList.remove('hidden');
-  box.innerHTML = `
-    <strong>Order Confirmed!</strong><br/>
-    Order Code: <span class="order-code"><strong>${data.order_code}</strong></span><br/>
-    Mode: ${data.is_guest ? 'Guest Checkout (No Account)' : 'Account Checkout'}<br/>
-    Save this code to track your order anytime.
-  `;
+    .join('');
 }
 
-function openAccountModal() {
-  const wrap = document.getElementById('accountContent');
-  if (customerUser) {
-    wrap.innerHTML = `
-      <p class="muted-text">Signed in as <strong>${customerUser.name}</strong> (${customerUser.email})</p>
-      <button class="chip-btn mt-16" onclick="logoutCustomer()">Sign Out</button>
-    `;
-  } else {
-    wrap.innerHTML = `
-      <p class="muted-text">Optional account for faster re-orders. Guest checkout works without an account too.</p>
-      <form onsubmit="handleCustomerAuth(event, 'login')" class="stack-form">
-        <h4>Login</h4>
-        <input id="custLoginEmail" type="email" placeholder="Email" required />
-        <input id="custLoginPass" type="password" placeholder="Password" required />
-        <button class="primary-btn" type="submit">Login</button>
-      </form>
-      <hr class="mt-16"/>
-      <form onsubmit="handleCustomerAuth(event, 'register')" class="stack-form">
-        <h4>Create Account</h4>
-        <input id="custRegName" type="text" placeholder="Your Name" required />
-        <input id="custRegEmail" type="email" placeholder="Email" required />
-        <input id="custRegPass" type="password" placeholder="Password" required />
-        <button class="chip-btn" type="submit">Sign Up</button>
-      </form>
-    `;
+async function fetchProducts() {
+  const grid = document.getElementById('productGrid');
+  if (grid) {
+    grid.innerHTML = '<p class="empty-state">Loading kinbo drops...</p>';
   }
-  document.getElementById('accountModal').classList.remove('hidden');
+
+  try {
+    const searchVal = document.getElementById('searchInput')?.value.trim() || '';
+    const params = new URLSearchParams();
+    if (selectedCategory && selectedCategory !== 'All') {
+      params.set('category', selectedCategory);
+    }
+    if (searchVal) {
+      params.set('search', searchVal);
+    }
+
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/products${queryStr}`);
+    if (!res.ok) throw new Error('Failed to load products');
+    products = await res.json();
+    renderProducts(products);
+  } catch (err) {
+    if (grid) {
+      grid.innerHTML = '<p class="empty-state">Could not connect to backend API. Please try again in a moment.</p>';
+    }
+  }
 }
 
-async function handleCustomerAuth(e, mode) {
+function getMainStorefrontElement() {
+  return (
+    document.getElementById('storefrontSection') ||
+    document.getElementById('mainStorefront') ||
+    document.getElementById('storefront') ||
+    document.querySelector('main')
+  );
+}
+
+function getAdminSectionElement() {
+  return (
+    document.getElementById('adminSection') ||
+    document.getElementById('adminPanel') ||
+    document.getElementById('adminView')
+  );
+}
+
+function openMainStorefront() {
+  const adminSec = getAdminSectionElement();
+  const storeSec = getMainStorefrontElement();
+
+  if (adminSec) adminSec.classList.add('hidden');
+  if (storeSec) storeSec.classList.remove('hidden');
+
+  fetchProducts();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  showToast('Back to kinbo storefront');
+}
+
+function ensureBackToStoreButton(adminSec) {
+  if (!adminSec || document.getElementById('backToStoreBtn')) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'backToStoreBtn';
+  btn.type = 'button';
+  btn.textContent = '← Back to Main Store';
+  btn.style.cssText =
+    'padding:10px 16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#ffffff;font-weight:600;cursor:pointer;margin-bottom:14px;display:inline-flex;align-items:center;gap:6px;';
+  btn.addEventListener('click', openMainStorefront);
+
+  adminSec.prepend(btn);
+}
+
+function openAdminPanel() {
+  const adminSec = getAdminSectionElement();
+  const storeSec = getMainStorefrontElement();
+
+  if (storeSec) storeSec.classList.add('hidden');
+  if (adminSec) {
+    adminSec.classList.remove('hidden');
+    ensureBackToStoreButton(adminSec);
+  }
+  loadAdminData();
+}
+
+function toggleCartDrawer(forceOpen) {
+  const drawer = document.getElementById('cartDrawer');
+  const backdrop = document.getElementById('drawerBackdrop');
+  if (!drawer || !backdrop) return;
+
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : drawer.classList.contains('hidden');
+  drawer.classList.toggle('hidden', !shouldOpen);
+  backdrop.classList.toggle('hidden', !shouldOpen);
+}
+
+async function handleCheckout(e) {
   e.preventDefault();
-  const endpoint = mode === 'login' ? '/auth/login' : '/auth/register';
-  const payload = mode === 'login'
-    ? { email: document.getElementById('custLoginEmail').value, password: document.getElementById('custLoginPass').value }
-    : { name: document.getElementById('custRegName').value, email: document.getElementById('custRegEmail').value, password: document.getElementById('custRegPass').value };
-
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    showToast(data.error || 'Authentication failed');
+  if (!cart.length) {
+    showToast('Your bag is empty');
     return;
   }
-  customerToken = data.token;
-  customerUser = data.user;
-  localStorage.setItem('kinbo_user_token', customerToken);
-  localStorage.setItem('kinbo_user_info', JSON.stringify(customerUser));
-  document.getElementById('accountBtn').textContent = customerUser.name.split(' ')[0];
-  closeModals();
-  showToast(`Welcome, ${customerUser.name}!`);
-}
 
-function logoutCustomer() {
-  customerToken = null;
-  customerUser = null;
-  localStorage.removeItem('kinbo_user_token');
-  localStorage.removeItem('kinbo_user_info');
-  document.getElementById('accountBtn').textContent = 'Account';
-  closeModals();
-  showToast('Signed out');
-}
+  const customer_name = document.getElementById('checkoutName')?.value.trim() || '';
+  const phone = document.getElementById('checkoutPhone')?.value.trim() || '';
+  const address = document.getElementById('checkoutAddress')?.value.trim() || '';
 
-function openTrackModal() {
-  document.getElementById('trackResult').innerHTML = '';
-  document.getElementById('trackModal').classList.remove('hidden');
-}
+  try {
+    const res = await fetch(`${API_BASE}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_name,
+        phone,
+        address,
+        items: cart.map((i) => ({ id: i.id, quantity: i.qty })),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Order failed');
 
-async function lookupOrder() {
-  const code = document.getElementById('trackCodeInput').value.trim();
-  if (!code) return;
-  const res = await fetch(`${API_BASE}/orders/track/${encodeURIComponent(code)}`);
-  const data = await res.json();
-  const out = document.getElementById('trackResult');
-  if (!res.ok) {
-    out.innerHTML = `<p class="muted-text">${data.error}</p>`;
-    return;
+    cart = [];
+    saveCart();
+    e.target.reset();
+    toggleCartDrawer(false);
+
+    const trackInput = document.getElementById('trackCodeInput');
+    if (trackInput) trackInput.value = data.order_code;
+    showToast(`Order placed! Code: ${data.order_code}`);
+    trackOrderByCode(data.order_code);
+  } catch (err) {
+    showToast(err.message);
   }
-  out.innerHTML = `
-    <div class="cart-item">
-      <div>
-        <strong>${data.order_code}</strong> • <span class="pill-badge">${data.status}</span>
-        <div class="muted-text">${data.items_summary} — ৳${data.total_amount}</div>
-      </div>
-    </div>
-  `;
 }
 
-// --- ADMIN ---
-function checkAdminState() {
-  const loggedIn = Boolean(adminToken);
-  document.getElementById('adminLoginBox').classList.toggle('hidden', loggedIn);
-  document.getElementById('adminDashboard').classList.toggle('hidden', !loggedIn);
-  if (loggedIn) {
-    loadAdminData();
+async function trackOrderByCode(codeOverride) {
+  const input = document.getElementById('trackCodeInput');
+  const resultBox = document.getElementById('trackResult');
+  const code = (codeOverride || input?.value || '').trim().toUpperCase();
+  if (!code || !resultBox) return;
+
+  resultBox.classList.remove('hidden');
+  resultBox.innerHTML = 'Checking order status...';
+
+  try {
+    const res = await fetch(`${API_BASE}/orders/track/${encodeURIComponent(code)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Order not found');
+
+    resultBox.innerHTML = `
+      <div><strong>Order Code:</strong> ${escapeHtml(data.order_code)}</div>
+      <div><strong>Status:</strong> ${escapeHtml(data.status)}</div>
+      <div><strong>Customer:</strong> ${escapeHtml(data.customer_name)} (${escapeHtml(data.phone)})</div>
+      <div><strong>Total:</strong> ৳${Number(data.total_amount).toLocaleString()}</div>
+    `;
+  } catch (err) {
+    resultBox.innerHTML = `<span class="error-text">${escapeHtml(err.message)}</span>`;
+  }
+}
+
+async function handleCustomerAuth(e, mode = 'login') {
+  e.preventDefault();
+  const endpoint = mode === 'register' ? '/auth/register' : '/auth/login';
+  const name = document.getElementById('authName')?.value.trim() || '';
+  const email = document.getElementById('authEmail')?.value.trim() || '';
+  const password = document.getElementById('authPassword')?.value || '';
+
+  const payload = mode === 'register' ? { name, email, password } : { email, password };
+
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Authentication failed');
+
+    customerToken = data.token;
+    customerUser = data.user;
+    localStorage.setItem('kinbo_user_token', customerToken);
+    localStorage.setItem('kinbo_user_info', JSON.stringify(customerUser));
+
+    const accBtn = document.getElementById('accountBtn');
+    if (accBtn) accBtn.textContent = customerUser.name;
+    document.getElementById('authModal')?.classList.add('hidden');
+    showToast(`Welcome, ${customerUser.name}`);
+  } catch (err) {
+    showToast(err.message);
   }
 }
 
 async function handleAdminLogin(e) {
   e.preventDefault();
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: document.getElementById('adminEmail').value,
-      password: document.getElementById('adminPassword').value
-    })
-  });
-  const data = await res.json();
-  if (!res.ok || data.user?.role !== 'ADMIN') {
-    showToast('Invalid admin credentials');
-    return;
-  }
-  adminToken = data.token;
-  localStorage.setItem('kinbo_admin_token', adminToken);
-  checkAdminState();
-  showToast('Admin panel unlocked');
-}
+  const email = document.getElementById('adminEmail')?.value.trim() || '';
+  const password = document.getElementById('adminPassword')?.value || '';
 
-function logoutAdmin() {
-  adminToken = null;
-  localStorage.removeItem('kinbo_admin_token');
-  checkAdminState();
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.user?.role !== 'admin') {
+      throw new Error('Invalid admin credentials');
+    }
+
+    adminToken = data.token;
+    localStorage.setItem('kinbo_admin_token', adminToken);
+    document.getElementById('adminLoginModal')?.classList.add('hidden');
+    openAdminPanel();
+    showToast('Admin panel unlocked');
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
 async function loadAdminData() {
-  const headers = { 'Authorization': `Bearer ${adminToken}` };
-  const [prodRes, ordRes] = await Promise.all([
-    fetch(`${API_BASE}/products`),
-    fetch(`${API_BASE}/admin/orders`, { headers })
-  ]);
+  if (!adminToken) return;
+  const headers = { Authorization: `Bearer ${adminToken}` };
 
-  if (ordRes.status === 401 || ordRes.status === 403) {
-    logoutAdmin();
-    return;
-  }
+  try {
+    const [prodRes, ordRes] = await Promise.all([
+      fetch(`${API_BASE}/admin/products`, { headers }),
+      fetch(`${API_BASE}/admin/orders`, { headers }),
+    ]);
 
-  const prods = await prodRes.json();
-  const orders = await ordRes.json();
-  const revenue = orders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+    if (prodRes.ok) {
+      const adminProds = await prodRes.json();
+      const tbody = document.getElementById('adminProductsBody');
+      if (tbody) {
+        tbody.innerHTML = adminProds
+          .map(
+            (p) => `
+              <tr>
+                <td>${escapeHtml(p.title)}</td>
+                <td>${escapeHtml(p.category)}</td>
+                <td>৳${Number(p.price).toLocaleString()}</td>
+                <td>${p.stock}</td>
+                <td><button type="button" onclick="deleteAdminProduct(${p.id})">Delete</button></td>
+              </tr>
+            `
+          )
+          .join('');
+      }
+    }
 
-  document.getElementById('adminKpis').innerHTML = `
-    <div class="kpi-box"><span>Total Drops</span><strong>${prods.length}</strong></div>
-    <div class="kpi-box"><span>Total Orders</span><strong>${orders.length}</strong></div>
-    <div class="kpi-box"><span>Guest Orders</span><strong>${orders.filter(o => o.is_guest).length}</strong></div>
-    <div class="kpi-box"><span>Order Volume</span><strong>৳${revenue.toLocaleString()}</strong></div>
-  `;
-
-  document.getElementById('adminProductList').innerHTML = prods.map(p => `
-    <div class="admin-row-item">
-      <span><strong>${p.name}</strong> (৳${p.price} • Stock: ${p.stock})</span>
-      <button class="chip-btn" onclick="deleteProduct(${p.id})">Delete</button>
-    </div>
-  `).join('');
-
-  document.getElementById('adminOrderList').innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Code</th>
-          <th>Type</th>
-          <th>Customer</th>
-          <th>Items</th>
-          <th>Total</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${orders.map(o => `
-          <tr>
-            <td class="order-code"><strong>${o.order_code}</strong></td>
-            <td>${o.is_guest ? 'Guest' : 'Account'}</td>
-            <td>${o.customer_name}<br/><span class="muted-text">${o.customer_phone}</span></td>
-            <td>${o.items_summary}</td>
-            <td>৳${Number(o.total_amount).toLocaleString()}</td>
-            <td>
-              <select onchange="updateOrderStatus(${o.id}, this.value)">
-                ${['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(st =>
-                  `<option value="${st}" ${o.status === st ? 'selected' : ''}>${st}</option>`
-                ).join('')}
-              </select>
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
+    if (ordRes.ok) {
+      const adminOrds = await ordRes.json();
+      const tbody = document.getElementById('adminOrdersBody');
+      if (tbody) {
+        tbody.innerHTML = adminOrds
+          .map(
+            (o) => `
+              <tr>
+                <td>${escapeHtml(o.order_code)}</td>
+                <td>${escapeHtml(o.customer_name)}</td>
+                <td>৳${Number(o.total_amount).toLocaleString()}</td>
+                <td>
+                  <select onchange="updateOrderStatus(${o.id}, this.value)">
+                    ${['Placed', 'Confirmed', 'Shipped', 'Delivered']
+                      .map(
+                        (st) =>
+                          `<option value="${st}" ${o.status === st ? 'selected' : ''}>${st}</option>`
+                      )
+                      .join('')}
+                  </select>
+                </td>
+              </tr>
+            `
+          )
+          .join('');
+      }
+    }
+  } catch (_) {}
 }
 
 async function handleAddProduct(e) {
   e.preventDefault();
-  const res = await fetch(`${API_BASE}/admin/products`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${adminToken}`
-    },
-    body: JSON.stringify({
-      name: document.getElementById('pName').value,
-      category: document.getElementById('pCategory').value,
-      price: document.getElementById('pPrice').value,
-      stock: document.getElementById('pStock').value,
-      tag: document.getElementById('pTag').value,
-      image_url: document.getElementById('pImage').value
-    })
-  });
-  if (res.ok) {
+  if (!adminToken) return;
+
+  const payload = {
+    title: document.getElementById('newProdTitle')?.value.trim() || '',
+    category: document.getElementById('newProdCategory')?.value.trim() || 'Apparel',
+    price: Number(document.getElementById('newProdPrice')?.value || 0),
+    stock: Number(document.getElementById('newProdStock')?.value || 10),
+    badge: document.getElementById('newProdBadge')?.value.trim() || '',
+    image_url: document.getElementById('newProdImage')?.value.trim() || '',
+    description: document.getElementById('newProdDesc')?.value.trim() || '',
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/products`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not add product');
+
     e.target.reset();
-    await fetchProducts();
-    await loadAdminData();
-    showToast('New drop published!');
+    showToast('New product added');
+    loadAdminData();
+    fetchProducts();
+  } catch (err) {
+    showToast(err.message);
   }
 }
 
-async function deleteProduct(id) {
-  const res = await fetch(`${API_BASE}/admin/products/${id}`, {
-    method: 'DELETE',
-    headers: { 'Authorization': `Bearer ${adminToken}` }
-  });
-  if (res.ok) {
-    await fetchProducts();
-    await loadAdminData();
-    showToast('Product removed');
-  }
+async function deleteAdminProduct(id) {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/admin/products/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    if (res.ok) {
+      showToast('Product deleted');
+      loadAdminData();
+      fetchProducts();
+    }
+  } catch (_) {}
 }
 
 async function updateOrderStatus(orderId, status) {
-  const res = await fetch(`${API_BASE}/admin/orders/${orderId}/status`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${adminToken}`
-    },
-    body: JSON.stringify({ status })
-  });
-  if (res.ok) {
-    showToast(`Order status → ${status}`);
-  }
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/admin/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({ status }),
+    });
+    if (res.ok) {
+      showToast(`Order status updated to ${status}`);
+    }
+  } catch (_) {}
 }
 
-// Init
-if (customerUser) {
-  document.getElementById('accountBtn').textContent = customerUser.name.split(' ')[0];
-}
-updateCartUI();
-fetchProducts();
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.cat-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.cat-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedCategory = btn.dataset.category || 'All';
+      fetchProducts();
+    });
+  });
+
+  document.getElementById('searchInput')?.addEventListener('input', () => {
+    clearTimeout(window._searchTimer);
+    window._searchTimer = setTimeout(fetchProducts, 250);
+  });
+
+  document.getElementById('cartBtn')?.addEventListener('click', () => toggleCartDrawer(true));
+  document.getElementById('closeCartBtn')?.addEventListener('click', () => toggleCartDrawer(false));
+  document.getElementById('drawerBackdrop')?.addEventListener('click', () => toggleCartDrawer(false));
+  document.getElementById('checkoutForm')?.addEventListener('submit', handleCheckout);
+  document.getElementById('trackBtn')?.addEventListener('click', () => trackOrderByCode());
+
+  document.getElementById('accountBtn')?.addEventListener('click', () => {
+    if (customerUser) {
+      showToast(`Signed in as ${customerUser.name}`);
+      return;
+    }
+    document.getElementById('authModal')?.classList.remove('hidden');
+  });
+  document.getElementById('closeAuthModal')?.addEventListener('click', () => {
+    document.getElementById('authModal')?.classList.add('hidden');
+  });
+  document.getElementById('authForm')?.addEventListener('submit', (e) => handleCustomerAuth(e, 'login'));
+
+  document.getElementById('adminOpenBtn')?.addEventListener('click', () => {
+    if (adminToken) {
+      openAdminPanel();
+    } else {
+      document.getElementById('adminLoginModal')?.classList.remove('hidden');
+    }
+  });
+  document.getElementById('closeAdminModal')?.addEventListener('click', () => {
+    document.getElementById('adminLoginModal')?.classList.add('hidden');
+  });
+  document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
+  document.getElementById('addProductForm')?.addEventListener('submit', handleAddProduct);
+  document.getElementById('backToStoreBtn')?.addEventListener('click', openMainStorefront);
+  document.getElementById('brandHomeBtn')?.addEventListener('click', openMainStorefront);
+
+  if (customerUser && document.getElementById('accountBtn')) {
+    document.getElementById('accountBtn').textContent = customerUser.name;
+  }
+
+  updateCartUI();
+  fetchProducts();
+});
+
